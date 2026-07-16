@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import Link from "next/link";
 import { useDropzone } from "react-dropzone";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -13,6 +14,7 @@ import {
   WifiOff,
   Folder,
   FolderOpen,
+  MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -246,6 +248,14 @@ export default function Home() {
         <header className="w-full mx-auto relative z-10 flex flex-col items-center justify-center pt-10 pb-16 md:pt-16 md:pb-24">
           {/* Top Right Badges (absolute on desktop, absolute on mobile top-right) */}
           <div className="absolute top-4 right-4 md:top-0 md:right-0 flex items-center gap-3 z-50">
+            <Link
+              href="/chat"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-sm hover:bg-indigo-100 transition-colors"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Chat with Aicyclinder</span>
+              <span className="sm:hidden">Chat</span>
+            </Link>
             {isBackendOnline !== null && (
               <Tooltip>
                 <TooltipTrigger
