@@ -5,13 +5,9 @@ from __future__ import annotations
 import json
 import logging
 
-from google.genai import types
-from google.genai.errors import ClientError
-
 from app.core.exceptions import DocumentAnalysisError
-from app.core.config import settings
 from app.services.ctd_map import CTD_MAP
-from app.services.gemini_service import get_client
+from app.services.llm import generate_json
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +23,22 @@ MODULE_NAMES = {
 _FALLBACK_SECTION = "1.2"
 
 
+def _normalize_path(raw) -> str:
+    """Coerce a model's section_path to a bare CTD path.
+
+    Models (esp. DeepSeek) often echo the whole catalogue line
+    "3.2.P.8.3: Stability Data (Drug Product)" instead of just "3.2.P.8.3".
+    Take the leading token before any ':' or whitespace.
+    """
+    if not raw:
+        return ""
+    path = str(raw).strip()
+    if path in CTD_MAP:
+        return path
+    candidate = path.split(":")[0].split()[0].strip().rstrip(".")
+    return candidate
+
+
 async def classify(text: str) -> dict:
     """Return {section_path, title, module, confidence, justification}."""
     catalogue = "\n".join(f"{p}: {t}" for p, t in CTD_MAP.items())
@@ -40,24 +52,20 @@ async def classify(text: str) -> dict:
     )
 
     try:
-        resp = await get_client().aio.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents=[prompt],
-            config=types.GenerateContentConfig(response_mime_type="application/json"),
-        )
-        data = json.loads(resp.text)
-    except ClientError as exc:
-        raise DocumentAnalysisError(
-            f"Classification service request failed: {exc}", status_code=502
-        ) from exc
+        raw = await generate_json(prompt)  # gemini | deepseek, per settings.LLM_PROVIDER
+        data = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise DocumentAnalysisError(
             "Classification service returned invalid JSON.", status_code=502
         ) from exc
+    except Exception as exc:  # network / API / provider errors
+        raise DocumentAnalysisError(
+            f"Classification service request failed: {exc}", status_code=502
+        ) from exc
 
-    path = data.get("section_path")
+    path = _normalize_path(data.get("section_path"))
     if path not in CTD_MAP:  # hallucinated / malformed path
-        logger.warning("[classify] invalid section_path '%s'; falling back to %s", path, _FALLBACK_SECTION)
+        logger.warning("[classify] invalid section_path '%s'; falling back to %s", data.get("section_path"), _FALLBACK_SECTION)
         path, data["confidence"] = _FALLBACK_SECTION, 0.0
 
     return {
