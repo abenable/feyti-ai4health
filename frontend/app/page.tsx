@@ -47,6 +47,8 @@ interface ProcessResponse {
     confidence: number;
     justification?: string;
   };
+  summary?: string;
+  key_points?: string[];
   dossier_folder: string;
 }
 
@@ -539,6 +541,36 @@ export default function Home() {
                           <p className="text-sm text-slate-600 leading-relaxed">
                             {result.classification.justification}
                           </p>
+                        )}
+
+                        {result.summary && (
+                          <div className="pt-1">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+                              Summary
+                            </p>
+                            <p className="text-sm text-slate-700 leading-relaxed">
+                              {result.summary}
+                            </p>
+                          </div>
+                        )}
+
+                        {result.key_points && result.key_points.length > 0 && (
+                          <div className="pt-1">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+                              Key Points
+                            </p>
+                            <ul className="space-y-1.5">
+                              {result.key_points.map((point, i) => (
+                                <li
+                                  key={i}
+                                  className="flex items-start gap-2 text-sm text-slate-700"
+                                >
+                                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />
+                                  <span className="leading-relaxed">{point}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                         )}
                       </div>
                     </CardContent>
