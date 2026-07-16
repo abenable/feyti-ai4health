@@ -119,7 +119,7 @@ async def process(file: UploadFile = File(...)):
         )
 
     text, ocr_used = extract(file_bytes, file.content_type, file.filename)
-    classification = await classify(text)
+    classification = await classify(text)  # includes summary + key_points
     placed = file_into_dossier(file_bytes, file.filename, classification, text)
 
     return ProcessResponse(
@@ -127,5 +127,7 @@ async def process(file: UploadFile = File(...)):
         extracted_chars=len(text),
         ocr_used=ocr_used,
         classification=classification,
+        summary=classification.get("summary", ""),
+        key_points=classification.get("key_points", []),
         dossier_folder=placed["folder"],
     )

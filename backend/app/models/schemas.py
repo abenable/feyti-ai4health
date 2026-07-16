@@ -25,6 +25,8 @@ class ProcessResponse(BaseModel):
     extracted_chars: int
     ocr_used: bool
     classification: Classification
+    summary: str = ""
+    key_points: list[str] = []
     dossier_folder: str
 
 

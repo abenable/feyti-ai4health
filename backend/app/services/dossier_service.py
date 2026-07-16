@@ -51,6 +51,9 @@ def file_into_dossier(file_bytes, filename, classification, extracted_text) -> d
         "title": title,
         "module": module,
         "confidence": classification["confidence"],
+        "justification": classification.get("justification", ""),
+        "summary": classification.get("summary", ""),
+        "key_points": classification.get("key_points", []),
         "extracted_chars": len(extracted_text),
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
     }

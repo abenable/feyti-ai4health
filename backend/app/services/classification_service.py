@@ -40,15 +40,27 @@ def _normalize_path(raw) -> str:
 
 
 async def classify(text: str) -> dict:
-    """Return {section_path, title, module, confidence, justification}."""
+    """Classify + summarize a document in one LLM call.
+
+    Returns {section_path, title, module, confidence, justification, summary,
+    key_points}. The model also cleans up OCR noise while it reads, so the
+    summary/key_points are judge-ready even when the input is raw OCR text.
+    """
     catalogue = "\n".join(f"{p}: {t}" for p, t in CTD_MAP.items())
     prompt = (
-        "You are a regulatory document classifier for an ICH-M4 CTD dossier.\n"
-        "Pick the ONE best-matching section for this document from the list.\n\n"
+        "You are a regulatory document analyst for an ICH-M4 CTD dossier.\n"
+        "The DOCUMENT text may come from OCR and contain noise — interpret and "
+        "silently correct obvious errors as you read.\n"
+        "Do two things: (1) pick the ONE best-matching CTD section from the list, "
+        "(2) summarize the document.\n\n"
         f"SECTIONS:\n{catalogue}\n\n"
-        f"DOCUMENT (first 6000 chars):\n{text[:6000]}\n\n"
-        'Respond ONLY with JSON: {"section_path": "<exact path from the list>", '
-        '"confidence": 0.0-1.0, "justification": "one sentence"}'
+        f"DOCUMENT (first 8000 chars):\n{text[:8000]}\n\n"
+        "Respond ONLY with JSON:\n"
+        '{"section_path": "<exact path from the list, e.g. 3.2.P.8.3>", '
+        '"confidence": 0.0-1.0, '
+        '"justification": "one sentence on why this section", '
+        '"summary": "2-3 sentence plain-language summary of the document", '
+        '"key_points": ["short factual point", "..."]}'
     )
 
     try:
@@ -68,10 +80,16 @@ async def classify(text: str) -> dict:
         logger.warning("[classify] invalid section_path '%s'; falling back to %s", data.get("section_path"), _FALLBACK_SECTION)
         path, data["confidence"] = _FALLBACK_SECTION, 0.0
 
+    key_points = data.get("key_points") or []
+    if not isinstance(key_points, list):
+        key_points = [str(key_points)]
+
     return {
         "section_path": path,
         "title": CTD_MAP[path],
         "module": MODULE_NAMES[path.split(".")[0]],
         "confidence": float(data.get("confidence", 0.0)),
         "justification": data.get("justification", ""),
+        "summary": data.get("summary", ""),
+        "key_points": [str(k) for k in key_points][:6],
     }
