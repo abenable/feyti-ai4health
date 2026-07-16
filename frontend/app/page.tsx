@@ -64,15 +64,12 @@ export interface DossierTree {
 }
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, "");
+// Empty by default: calls are same-origin relative paths, proxied server-side
+// by Next.js rewrites to the internal backend (see next.config.ts). Set
+// NEXT_PUBLIC_API_URL only to bypass the proxy and hit the backend directly.
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, "") ?? "";
 
 function getApiUrl(path: string) {
-  if (!API_BASE_URL) {
-    throw new Error(
-      "NEXT_PUBLIC_API_URL is not configured. Set it in frontend/.env or frontend/.env.local and rebuild the frontend.",
-    );
-  }
-
   return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
@@ -116,11 +113,6 @@ export default function Home() {
 
   useEffect(() => {
     const checkHealth = async () => {
-      if (!API_BASE_URL) {
-        setIsBackendOnline(false);
-        return;
-      }
-
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 

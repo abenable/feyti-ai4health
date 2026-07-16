@@ -16,7 +16,9 @@ import {
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, "");
+// Empty by default: same-origin relative calls proxied server-side by Next.js
+// rewrites to the internal backend (see next.config.ts).
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, "") ?? "";
 
 const SYSTEM_PROMPT =
   "You are Aicyclinder, a precise pharmaceutical regulatory assistant.";
@@ -34,11 +36,6 @@ interface ChatMessage {
 }
 
 function getApiUrl(path: string) {
-  if (!API_BASE_URL) {
-    throw new Error(
-      "NEXT_PUBLIC_API_URL is not configured. Set it in frontend/.env or frontend/.env.local and rebuild the frontend.",
-    );
-  }
   return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
@@ -66,10 +63,6 @@ export default function ChatPage() {
   // Poll the selected backend's health through the proxy. Re-runs on mode change.
   useEffect(() => {
     const checkHealth = async () => {
-      if (!API_BASE_URL) {
-        setIsModelOnline(false);
-        return;
-      }
       try {
         const res = await fetch(
           getApiUrl(`/api/v1/chat/health?provider=${mode}`),
