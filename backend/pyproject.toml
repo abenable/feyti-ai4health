@@ -1,0 +1,25 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "Feyti regulatory document classification demo backend."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi[standard]>=0.135.2",
+    "google-genai>=1.68.0",
+    "pydantic-settings>=2.13.1",
+    "pymupdf>=1.24.0",
+    "python-docx>=1.2.0",
+    "python-multipart>=0.0.22",
+    "pytesseract>=0.3.13",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.15.7",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
