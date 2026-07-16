@@ -9,8 +9,10 @@ services:
     restart: unless-stopped
     env_file:
       - ./backend/.env
-    ports:
-      - "8022:8000"
+    # No published ports: backend is reachable only on the internal network,
+    # via the frontend's server-side proxy (see next.config.ts rewrites).
+    expose:
+      - "8000"
     networks:
       - feyti-network
     healthcheck:
@@ -23,12 +25,14 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # Frontend proxies /api and /health to the backend service internally.
+        BACKEND_INTERNAL_URL: http://backend:8000
     container_name: feyti-frontend
     restart: unless-stopped
+    # Only this port is published to the host.
     ports:
       - "3200:3000"
-    env_file:
-      - ./frontend/.env
     depends_on:
       backend:
         condition: service_healthy

@@ -12,7 +12,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Add build-time argument for Next.js to bake into the static pages if necessary
+# Internal backend URL baked into Next.js rewrites at build time (rewrites are
+# evaluated during `next build`). Defaults to the compose service name.
+ARG BACKEND_INTERNAL_URL=http://backend:8000
+ENV BACKEND_INTERNAL_URL=${BACKEND_INTERNAL_URL}
 
 # Disable telemetry during build
 ENV NEXT_TELEMETRY_DISABLED=1
