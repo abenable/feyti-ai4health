@@ -17,14 +17,19 @@
 # ─────────────────────────────────────────────────────────────────────────────
 from __future__ import annotations
 
+import base64
 import io
 import logging
 import time
 from typing import List, Tuple
 
+import httpx
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+_OCR_PAGE_TIMEOUT = 60  # seconds per page for a remote OCR call
 
 # Max scanned pages to OCR (cost/time cap). The first pages carry the
 # identifying content needed to classify + fill; deep pages add little.
@@ -72,6 +77,51 @@ def _ocr_via_gemini_page(png_bytes: bytes) -> str:
     except Exception as exc:
         logger.warning("[OCR:Gemini] page failed: %s", exc)
         return ""
+
+
+_OCR_QUESTION = (
+    "Transcribe ALL text in this document image verbatim, preserving numbers, "
+    "tables and headings. Output ONLY the transcribed text, nothing else."
+)
+
+
+def _ocr_via_moondream(png_bytes: bytes) -> str:
+    """OCR a single page via Cloudflare Workers AI (Moondream). Returns text or ""."""
+    if not (settings.CLOUDFLARE_ACCOUNT_ID and settings.CLOUDFLARE_API_TOKEN):
+        logger.warning("[OCR:Moondream] Cloudflare credentials not configured")
+        return ""
+    url = (
+        f"https://api.cloudflare.com/client/v4/accounts/"
+        f"{settings.CLOUDFLARE_ACCOUNT_ID}/ai/run/{settings.CLOUDFLARE_OCR_MODEL}"
+    )
+    data_uri = "data:image/png;base64," + base64.b64encode(png_bytes).decode()
+    payload = {
+        "task": "query",
+        "question": _OCR_QUESTION,
+        "image": data_uri,
+        "reasoning": False,
+        "stream": False,  # default is True (SSE) → empty JSON body without this
+        "max_tokens": 4096,
+    }
+    headers = {"Authorization": f"Bearer {settings.CLOUDFLARE_API_TOKEN}"}
+    try:
+        resp = httpx.post(url, json=payload, headers=headers, timeout=_OCR_PAGE_TIMEOUT)
+        resp.raise_for_status()
+        # Cloudflare wraps as {"result": {...}}; Moondream nests again: result.result.answer
+        outer = resp.json().get("result", {})
+        inner = outer.get("result", outer)
+        text = inner.get("answer") or inner.get("caption") or ""
+        return text.strip()
+    except Exception as exc:
+        logger.warning("[OCR:Moondream] page failed: %s", exc)
+        return ""
+
+
+def _ocr_page(png_bytes: bytes) -> str:
+    """Dispatch a single page to the configured primary OCR provider."""
+    if settings.OCR_PROVIDER == "gemini":
+        return _ocr_via_gemini_page(png_bytes)
+    return _ocr_via_moondream(png_bytes)
 
 
 def _ocr_via_tesseract(png_bytes: bytes) -> str:
@@ -125,21 +175,21 @@ def _extract_pdf(pdf_bytes: bytes) -> Tuple[List[dict], bool]:
 
         logger.info("[Processor] Running OCR on %d scanned page(s)", len(scanned_pages))
 
-        # Per-page OCR — Gemini per page (reliable verbatim), with tesseract as a
-        # per-page fallback when Gemini returns thin text. Per-page avoids the flaky
-        # batch behaviour and degrades gracefully page by page.
+        # Per-page OCR via the configured provider (Cloudflare Moondream by
+        # default; Gemini optional), with tesseract as a local fallback when the
+        # provider returns thin text. Per-page degrades gracefully page by page.
         _start = time.monotonic()
-        gem_chars = 0
+        ocr_chars = 0
         tess_chars = 0
         for page_num, page in scanned_pages:
             if time.monotonic() - _start > OCR_TOTAL_BUDGET:
                 diag.append(f"OCR stopped at budget after page {page_num}")
                 break
             png = _page_to_png_bytes(page)
-            text = _ocr_via_gemini_page(png)
+            text = _ocr_page(png)
             if text:
-                gem_chars += len(text)
-            # A real page has hundreds of chars; if Gemini returns thin text
+                ocr_chars += len(text)
+            # A real page has hundreds of chars; if the provider returns thin text
             # (a summary/refusal), fall back to tesseract and keep the longer.
             if len(text) < 100:
                 t = _ocr_via_tesseract(png)
@@ -148,9 +198,9 @@ def _extract_pdf(pdf_bytes: bytes) -> Tuple[List[dict], bool]:
                     tess_chars += len(t)
             chunks.append({"page": page_num, "text": text, "is_ocr": True})
         had_ocr = True
-        diag.append(f"Gemini/page: {gem_chars} chars; Tesseract: {tess_chars} chars")
-        logger.info("[Processor] per-page OCR: gemini=%d tesseract=%d chars",
-                    gem_chars, tess_chars)
+        diag.append(f"{settings.OCR_PROVIDER}: {ocr_chars} chars; Tesseract: {tess_chars} chars")
+        logger.info("[Processor] per-page OCR: provider(%s)=%d tesseract=%d chars",
+                    settings.OCR_PROVIDER, ocr_chars, tess_chars)
 
     # Sort by page number
     chunks.sort(key=lambda c: c["page"])
