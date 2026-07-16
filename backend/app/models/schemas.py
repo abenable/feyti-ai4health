@@ -43,3 +43,20 @@ class DossierSection(BaseModel):
 class DossierModule(BaseModel):
     module: str
     sections: list[DossierSection]
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage]
+    max_new_tokens: int = 512
+    temperature: float = 0.0
+    # "aicyclinder" = hosted fine-tuned model; "cloud" = DeepSeek (kept internal).
+    provider: str = "aicyclinder"
+
+
+class ChatResponse(BaseModel):
+    response: str
