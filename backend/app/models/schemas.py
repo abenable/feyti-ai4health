@@ -69,7 +69,7 @@ class ReviewStatus(BaseModel):
 
 class DocumentDetail(BaseModel):
     markdown: str
-    status: ReviewStatus
+    status: str  # review state string ("draft"|"edited"|"approved")
     meta: dict
 
 
@@ -92,7 +92,7 @@ class FeedbackRequest(BaseModel):
 
 class GenerateResponse(BaseModel):
     markdown: str
-    status: ReviewStatus
+    status: str  # review state string ("draft"|"edited"|"approved")
 
 
 class ChatMessage(BaseModel):

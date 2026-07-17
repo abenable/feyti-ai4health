@@ -64,7 +64,7 @@ async def generate(request: GenerateRequest):
     markdown = await generate_document(extracted_text, meta)
     status_record = read_status(section_dir, stem)
     write_generated(section_dir, stem, markdown, status=STATUS_DRAFT, feedback_history=status_record.get("feedback_history", []))
-    return GenerateResponse(markdown=markdown, status=ReviewStatus(**read_status(section_dir, stem)))
+    return GenerateResponse(markdown=markdown, status=read_status(section_dir, stem)["status"])
 
 
 @router.get("/documents", response_model=list[GeneratedDoc])
@@ -78,7 +78,7 @@ def document(section_path: str = Query(...), stem: str = Query(...)):
     markdown = read_generated(section_dir, safe_stem)
     status = read_status(section_dir, safe_stem)
     meta = read_meta(section_dir, safe_stem)
-    return DocumentDetail(markdown=markdown, status=ReviewStatus(**status), meta=meta)
+    return DocumentDetail(markdown=markdown, status=status["status"], meta=meta)
 
 
 @router.put("/document", response_model=GenerateResponse)
@@ -92,7 +92,7 @@ def edit_document(request: EditRequest):
         status=STATUS_EDITED,
         feedback_history=status_record.get("feedback_history", []),
     )
-    return GenerateResponse(markdown=request.markdown, status=ReviewStatus(**read_status(section_dir, safe_stem)))
+    return GenerateResponse(markdown=request.markdown, status=read_status(section_dir, safe_stem)["status"])
 
 
 @router.post("/feedback", response_model=GenerateResponse)
@@ -118,7 +118,7 @@ async def feedback(request: FeedbackRequest):
 
     history.append({"feedback": request.feedback, "regenerated_at": datetime.now(timezone.utc).isoformat()})
     write_generated(section_dir, safe_stem, new_markdown, status=STATUS_DRAFT, feedback_history=history)
-    return GenerateResponse(markdown=new_markdown, status=ReviewStatus(**read_status(section_dir, safe_stem)))
+    return GenerateResponse(markdown=new_markdown, status=read_status(section_dir, safe_stem)["status"])
 
 
 @router.post("/approve", response_model=ReviewStatus)
