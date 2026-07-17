@@ -86,6 +86,13 @@ interface DocumentDetail {
 // /generate and /feedback return only markdown + status (no meta).
 type GenerateResult = Pick<DocumentDetail, "markdown" | "status">;
 
+interface NewSectionResponse {
+  section_path: string;
+  stem: string;
+  markdown: string;
+  status: "draft" | "edited" | "approved";
+}
+
 function statusClasses(status: string) {
   switch (status) {
     case "approved":
@@ -139,6 +146,13 @@ export default function ReviewPage() {
   const [isAugmenting, setIsAugmenting] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  // An empty CTD section the user opened to author from scratch.
+  const [newSection, setNewSection] = useState<{
+    path: string;
+    title: string;
+    module: string;
+  } | null>(null);
+  const [creating, setCreating] = useState<"blank" | "ai" | null>(null);
 
   // Flattened view of every filed document across the plan, for counts/checks.
   const allDocs = plan.flatMap((m) => m.sections.flatMap((s) => s.documents));
@@ -161,6 +175,7 @@ export default function ReviewPage() {
   }, [fetchPlan]);
 
   const loadDocument = useCallback(async (doc: ReviewDoc) => {
+    setNewSection(null);
     setSelected(doc);
     setDetailLoading(true);
     setIsEditing(false);
@@ -184,6 +199,49 @@ export default function ReviewPage() {
       setDetailLoading(false);
     }
   }, []);
+
+  // Open an empty CTD section to author it (choose blank or AI in the panel).
+  const openEmptySection = (path: string, title: string, module: string) => {
+    setSelected(null);
+    setDetail(null);
+    setIsEditing(false);
+    setNewSection({ path, title, module });
+  };
+
+  // Create the document for the opened empty section, then load it normally.
+  const createSection = async (augment: boolean) => {
+    if (!newSection) return;
+    setCreating(augment ? "ai" : "blank");
+    try {
+      const res = await fetch(getApiUrl("/api/v1/dossier/section"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ctd_path: newSection.path, augment }),
+      });
+      if (!res.ok) throw new Error(await readErrorMessage(res));
+      const data: NewSectionResponse = await res.json();
+      const doc: ReviewDoc = {
+        module: newSection.module,
+        section_path: data.section_path,
+        title: newSection.title,
+        stem: data.stem,
+        filename: "",
+        status: data.status,
+        updated_at: new Date().toISOString(),
+      };
+      setNewSection(null);
+      setSelected(doc);
+      setDetail({ markdown: data.markdown, status: data.status, meta: {} });
+      setEditMarkdown(data.markdown);
+      setIsEditing(!augment); // blank → drop straight into the editor
+      fetchPlan();
+      toast.success(augment ? "Section drafted — review the ⚠️ gaps." : "Blank section created.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create section.");
+    } finally {
+      setCreating(null);
+    }
+  };
 
   const saveEdit = async () => {
     if (!selected) return;
@@ -453,17 +511,30 @@ export default function ReviewPage() {
                               </span>
                             );
 
-                            // Empty section: a static, muted row (nothing to open).
+                            // Empty section: clickable to author it from scratch.
                             if (sec.documents.length === 0) {
+                              const isOpen = newSection?.path === sec.path;
                               return (
-                                <div
+                                <button
                                   key={sec.path}
-                                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg opacity-60"
+                                  type="button"
+                                  onClick={() =>
+                                    openEmptySection(
+                                      sec.path,
+                                      sec.title,
+                                      mod.module,
+                                    )
+                                  }
+                                  className={`w-full text-left flex items-center gap-1.5 px-2 py-1 rounded-lg transition-colors ${
+                                    isOpen
+                                      ? "bg-indigo-50 ring-1 ring-indigo-200"
+                                      : "opacity-60 hover:opacity-100 hover:bg-slate-50"
+                                  }`}
                                 >
                                   <span className="w-3 shrink-0" />
                                   {label}
                                   {badge}
-                                </div>
+                                </button>
                               );
                             }
 
@@ -530,7 +601,45 @@ export default function ReviewPage() {
 
           {/* Right: Document viewer/editor */}
           <Card className="lg:col-span-8 flex flex-col border-slate-200/60 shadow-xl shadow-indigo-100/20 bg-white/80 backdrop-blur-xl rounded-3xl overflow-hidden">
-            {!selected ? (
+            {newSection ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
+                <div className="w-16 h-16 rounded-3xl bg-indigo-100 flex items-center justify-center text-indigo-600 mb-4">
+                  <Sparkles className="w-8 h-8" />
+                </div>
+                <h3 className="font-serif text-xl text-slate-800 mb-1">
+                  {newSection.path} · {newSection.title}
+                </h3>
+                <p className="text-slate-500 text-sm max-w-md mb-6">
+                  This section has no document yet. Draft it with AI (structure +
+                  ⚠️ gaps for missing data) or start from a blank page.
+                </p>
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <Button
+                    onClick={() => createSection(true)}
+                    disabled={creating !== null}
+                  >
+                    {creating === "ai" ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4" />
+                    )}
+                    Generate with AI
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => createSection(false)}
+                    disabled={creating !== null}
+                  >
+                    {creating === "blank" ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Edit3 className="w-4 h-4" />
+                    )}
+                    Start writing
+                  </Button>
+                </div>
+              </div>
+            ) : !selected ? (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
                 <div className="w-16 h-16 rounded-3xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 mb-4">
                   <FileText className="w-8 h-8" />
@@ -539,8 +648,8 @@ export default function ReviewPage() {
                   Select a document
                 </h3>
                 <p className="text-slate-500 text-sm max-w-sm">
-                  Choose a generated draft from the list to review, edit,
-                  approve, or download.
+                  Choose a section from the plan to review, edit, approve, or
+                  author a new one.
                 </p>
               </div>
             ) : detailLoading ? (
