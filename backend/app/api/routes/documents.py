@@ -4,7 +4,8 @@ from app.core.exceptions import DocumentAnalysisError
 from app.services.gemini_service import analyze_document
 from app.services.document_processor import DocumentProcessor
 from app.services.classification_service import classify
-from app.services.dossier_service import file_into_dossier
+from app.services.dossier_service import file_into_dossier, write_generated
+from app.services.generation_service import generate_document
 from app.models.schemas import AnalysisResponse, ProcessResponse
 
 logger = logging.getLogger(__name__)
@@ -121,6 +122,13 @@ async def process(file: UploadFile = File(...)):
     text, ocr_used = extract(file_bytes, file.content_type, file.filename)
     classification = await classify(text)  # includes summary + key_points
     placed = file_into_dossier(file_bytes, file.filename, classification, text)
+
+    # Auto-generate the initial CTD section draft for review.
+    try:
+        draft = await generate_document(text, classification)
+        write_generated(placed["section_dir"], placed["stem"], draft, status="draft")
+    except Exception as exc:
+        logger.warning("Auto-generation failed for %s: %s", file.filename, exc)
 
     return ProcessResponse(
         filename=file.filename,

@@ -47,6 +47,51 @@ class DossierModule(BaseModel):
     sections: list[DossierSection]
 
 
+class GeneratedDoc(BaseModel):
+    section_path: str
+    stem: str
+    filename: str
+    title: str
+    module: str
+    status: str
+    updated_at: str
+    feedback_count: int
+
+
+class ReviewStatus(BaseModel):
+    status: str
+    updated_at: str
+    feedback_history: list[dict]
+
+
+class DocumentDetail(BaseModel):
+    markdown: str
+    status: ReviewStatus
+    meta: dict
+
+
+class GenerateRequest(BaseModel):
+    section_path: str
+    stem: str
+
+
+class EditRequest(BaseModel):
+    section_path: str
+    stem: str
+    markdown: str
+
+
+class FeedbackRequest(BaseModel):
+    section_path: str
+    stem: str
+    feedback: str
+
+
+class GenerateResponse(BaseModel):
+    markdown: str
+    status: ReviewStatus
+
+
 class ChatMessage(BaseModel):
     role: str
     content: str
