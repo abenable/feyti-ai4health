@@ -50,6 +50,27 @@ class DossierModule(BaseModel):
 # NOTE: in the review/generate models below, `section_path` is the dossier
 # FOLDER path "<module>/<section> <title>" (as returned by /documents), NOT the
 # bare CTD path like "3.2.P.8.3". The bare CTD path lives in meta["section_path"].
+class PlanDoc(BaseModel):
+    section_path: str  # folder path, for loading the document
+    stem: str
+    filename: str
+    title: str
+    status: str  # draft | edited | approved
+    updated_at: str
+
+
+class PlanSection(BaseModel):
+    path: str  # bare CTD path, e.g. "3.2.P.8.3"
+    title: str
+    status: str  # approved | in_review | empty
+    documents: list[PlanDoc]
+
+
+class PlanModule(BaseModel):
+    module: str
+    sections: list[PlanSection]
+
+
 class ProductContext(BaseModel):
     """Dossier-wide product details, captured before upload to ground the
     classification and generation prompts. All fields optional."""

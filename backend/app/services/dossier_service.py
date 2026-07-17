@@ -183,12 +183,46 @@ def list_generated_docs() -> list[dict]:
                 "filename": meta.get("filename", ""),
                 "title": meta.get("title", ""),
                 "module": meta.get("module", ""),
+                # Bare CTD path (e.g. "3.2.P.8.3") — lets the plan builder map a
+                # filed document back onto its section in the CTD catalogue.
+                "ctd_path": meta.get("section_path", ""),
                 "status": status["status"],
                 "updated_at": status["updated_at"],
                 "feedback_count": len(status.get("feedback_history", [])),
             }
         )
     return docs
+
+
+def build_plan() -> list[dict]:
+    """Merge the full CTD catalogue with filed documents into a completion map.
+
+    Every CTD section is returned (even with no document), grouped by module,
+    each carrying a rollup status: 'approved' (all its docs approved),
+    'in_review' (has docs, not all approved), or 'empty' (no document yet).
+    """
+    from collections import defaultdict
+
+    from app.services.ctd_map import CTD_MAP, MODULE_NAMES
+
+    docs_by_path: dict[str, list] = defaultdict(list)
+    for d in list_generated_docs():
+        docs_by_path[d["ctd_path"]].append(d)
+
+    modules: dict[str, list] = {}
+    for path, title in CTD_MAP.items():
+        module = MODULE_NAMES.get(path.split(".")[0], "Other")
+        docs = docs_by_path.get(path, [])
+        if not docs:
+            status = "empty"
+        elif all(x["status"] == "approved" for x in docs):
+            status = "approved"
+        else:
+            status = "in_review"
+        modules.setdefault(module, []).append(
+            {"path": path, "title": title, "status": status, "documents": docs}
+        )
+    return [{"module": m, "sections": secs} for m, secs in modules.items()]
 
 
 _context_cache: tuple[float, dict] | None = None  # (mtime, value); invalidated on write

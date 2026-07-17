@@ -6,19 +6,11 @@ import json
 import logging
 
 from app.core.exceptions import DocumentAnalysisError
-from app.services.ctd_map import CTD_MAP
+from app.services.ctd_map import CTD_MAP, MODULE_NAMES
 from app.services.dossier_service import context_block
 from app.services.llm import generate_json
 
 logger = logging.getLogger(__name__)
-
-MODULE_NAMES = {
-    "1": "Module 1 — Administrative",
-    "2": "Module 2 — Summaries",
-    "3": "Module 3 — Quality",
-    "4": "Module 4 — Nonclinical",
-    "5": "Module 5 — Clinical",
-}
 
 # Default fallback for empty/hallucinated classifications.
 _FALLBACK_SECTION = "1.2"

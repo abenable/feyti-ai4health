@@ -13,6 +13,7 @@ from app.models.schemas import (
     GenerateRequest,
     GenerateResponse,
     GeneratedDoc,
+    PlanModule,
     ProductContext,
     ReviewStatus,
 )
@@ -21,6 +22,7 @@ from app.services.dossier_service import (
     STATUS_DRAFT,
     STATUS_EDITED,
     _safe_filename,
+    build_plan,
     list_generated_docs,
     load_extracted_text,
     read_context,
@@ -86,6 +88,12 @@ async def generate(request: GenerateRequest):
 @router.get("/documents", response_model=list[GeneratedDoc])
 def documents():
     return [GeneratedDoc(**d) for d in list_generated_docs()]
+
+
+@router.get("/plan", response_model=list[PlanModule])
+def plan():
+    """Full CTD catalogue merged with filed documents (approved/in_review/empty)."""
+    return build_plan()
 
 
 @router.get("/document", response_model=DocumentDetail)

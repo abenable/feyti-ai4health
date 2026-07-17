@@ -23,6 +23,15 @@ from app.services.ctd_structure import get_flat_index
 
 DEFAULT_REGION = "uganda"
 
+# Display names for the five CTD modules, keyed by the leading path digit.
+MODULE_NAMES = {
+    "1": "Module 1 — Administrative",
+    "2": "Module 2 — Summaries",
+    "3": "Module 3 — Quality",
+    "4": "Module 4 — Nonclinical",
+    "5": "Module 5 — Clinical",
+}
+
 # Full ICH catalogue (parents + leaves). Drop the "[name, dosage form]" /
 # "[Uganda NDA Form 1]" template placeholders so user-facing titles read clean.
 # ponytail: full flat index — if the fine-grained tabulated-summary leaves
