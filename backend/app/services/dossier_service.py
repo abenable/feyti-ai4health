@@ -268,6 +268,40 @@ def context_block(header: str) -> str:
     return header + "\n" + "\n".join(lines)
 
 
+def create_section_document(ctd_path: str, title: str, module: str, stem: str = "section") -> dict:
+    """Create (idempotently) an authored-document scaffold for a CTD section
+    that has no uploaded source, so it can be edited/generated/approved like any
+    filed document. Returns {section_dir, stem, section_path (folder rel)}.
+    """
+    safe_stem = _safe_filename(stem)
+    module_dir = _ROOT / _safe_dir_name(module)
+    section_dir = module_dir / _safe_dir_name(f"{ctd_path} {title}")
+    section_dir.mkdir(parents=True, exist_ok=True)
+    (module_dir / ".module.json").write_text(json.dumps({"module": module}))
+
+    meta_path = _meta_path(section_dir, safe_stem)
+    if not meta_path.exists():
+        meta_path.write_text(json.dumps({
+            "filename": "",  # authored, no uploaded source
+            "section_path": ctd_path,
+            "title": title,
+            "module": module,
+            "confidence": 1.0,
+            "justification": "Authored directly in the review workspace.",
+            "summary": "",
+            "key_points": [],
+            "extracted_chars": 0,
+            "extracted_text": "",
+            "uploaded_at": _now_iso(),
+        }, indent=2))
+
+    return {
+        "section_dir": section_dir,
+        "stem": safe_stem,
+        "section_path": str(section_dir.relative_to(_ROOT)),
+    }
+
+
 def file_into_dossier(file_bytes, filename, classification, extracted_text) -> dict:
     """Write file and metadata under DOSSIER_ROOT/<module>/<section>."""
     name = _safe_filename(filename)

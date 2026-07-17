@@ -71,6 +71,18 @@ class PlanModule(BaseModel):
     sections: list[PlanSection]
 
 
+class NewSectionRequest(BaseModel):
+    ctd_path: str  # bare CTD path, e.g. "3.2.P.8.3"
+    augment: bool = False  # True → AI-author a skeleton; False → blank to write
+
+
+class NewSectionResponse(BaseModel):
+    section_path: str  # folder path, for loading/editing the new document
+    stem: str
+    markdown: str
+    status: str
+
+
 class ProductContext(BaseModel):
     """Dossier-wide product details, captured before upload to ground the
     classification and generation prompts. All fields optional."""

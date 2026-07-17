@@ -13,6 +13,8 @@ from app.models.schemas import (
     GenerateRequest,
     GenerateResponse,
     GeneratedDoc,
+    NewSectionRequest,
+    NewSectionResponse,
     PlanModule,
     ProductContext,
     ReviewStatus,
@@ -23,6 +25,7 @@ from app.services.dossier_service import (
     STATUS_EDITED,
     _safe_filename,
     build_plan,
+    create_section_document,
     list_generated_docs,
     load_extracted_text,
     read_context,
@@ -94,6 +97,41 @@ def documents():
 def plan():
     """Full CTD catalogue merged with filed documents (approved/in_review/empty)."""
     return build_plan()
+
+
+@router.post("/section", response_model=NewSectionResponse)
+async def create_section(request: NewSectionRequest):
+    """Author a document for a CTD section that has no uploaded source.
+
+    augment=True generates an AI skeleton (structure + '⚠️ TO BE PROVIDED' gaps,
+    grounded in the product context); augment=False creates a blank draft to
+    write by hand. Either way the section becomes a normal editable document.
+    """
+    from app.services.ctd_map import CTD_MAP, MODULE_NAMES
+
+    title = CTD_MAP.get(request.ctd_path)
+    if title is None:
+        raise HTTPException(status_code=404, detail=f"Unknown CTD section: {request.ctd_path}")
+    module = MODULE_NAMES.get(request.ctd_path.split(".")[0], "Other")
+
+    info = create_section_document(request.ctd_path, title, module)
+    section_dir, stem = info["section_dir"], info["stem"]
+    meta = read_meta(section_dir, stem)
+
+    if request.augment:
+        markdown = await generate_document("", meta, augment=True)
+    else:
+        markdown = read_generated(section_dir, stem)  # "" for a brand-new blank
+
+    status_record = read_status(section_dir, stem)
+    write_generated(section_dir, stem, markdown, status=STATUS_DRAFT,
+                    feedback_history=status_record.get("feedback_history", []))
+    return NewSectionResponse(
+        section_path=info["section_path"],
+        stem=stem,
+        markdown=markdown,
+        status=read_status(section_dir, stem)["status"],
+    )
 
 
 @router.get("/document", response_model=DocumentDetail)
