@@ -47,8 +47,11 @@ class DossierModule(BaseModel):
     sections: list[DossierSection]
 
 
+# NOTE: in the review/generate models below, `section_path` is the dossier
+# FOLDER path "<module>/<section> <title>" (as returned by /documents), NOT the
+# bare CTD path like "3.2.P.8.3". The bare CTD path lives in meta["section_path"].
 class GeneratedDoc(BaseModel):
-    section_path: str
+    section_path: str  # folder path: "<module>/<section> <title>"
     stem: str
     filename: str
     title: str

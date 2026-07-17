@@ -28,19 +28,22 @@ async def generate_json(prompt: str) -> str:
     return await _gemini(prompt, json_mode=True)
 
 
-async def generate_text(prompt: str) -> str:
-    """Return the model's raw response text (free-form)."""
+async def generate_text(prompt: str, max_tokens: int | None = None) -> str:
+    """Return the model's raw response text (free-form).
+
+    max_tokens lets long outputs (e.g. full CTD section documents) exceed the
+    provider's default cap; None uses the provider default.
+    """
     if settings.LLM_PROVIDER == "deepseek":
-        return await _deepseek(prompt, json_mode=False)
-    return await _gemini(prompt, json_mode=False)
+        return await _deepseek(prompt, json_mode=False, max_tokens=max_tokens)
+    return await _gemini(prompt, json_mode=False, max_tokens=max_tokens)
 
 
 # ── Gemini ───────────────────────────────────────────────────────────────────
-async def _gemini(prompt: str, json_mode: bool) -> str:
-    config = (
-        types.GenerateContentConfig(response_mime_type="application/json")
-        if json_mode
-        else None
+async def _gemini(prompt: str, json_mode: bool, max_tokens: int | None = None) -> str:
+    config = types.GenerateContentConfig(
+        response_mime_type="application/json" if json_mode else None,
+        max_output_tokens=max_tokens,
     )
     resp = await get_client().aio.models.generate_content(
         model=settings.GEMINI_MODEL,
@@ -51,9 +54,9 @@ async def _gemini(prompt: str, json_mode: bool) -> str:
 
 
 # ── DeepSeek (OpenAI-compatible REST) ────────────────────────────────────────
-async def _deepseek(prompt: str, json_mode: bool) -> str:
+async def _deepseek(prompt: str, json_mode: bool, max_tokens: int | None = None) -> str:
     messages = [{"role": "user", "content": prompt}]
-    return await deepseek_chat(messages, json_mode=json_mode)
+    return await deepseek_chat(messages, json_mode=json_mode, max_tokens=max_tokens)
 
 
 async def deepseek_chat(

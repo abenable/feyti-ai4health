@@ -20,6 +20,19 @@ def _set_margins(doc: Document) -> None:
         section.right_margin = Inches(1)
 
 
+def _add_inline(paragraph, text: str) -> None:
+    """Render a subset of inline Markdown (**bold**, [text](url)) into runs."""
+    # Turn links into their display text first; a DOCX paragraph can't be a
+    # hyperlink without extra plumbing, and the text is what a reviewer reads.
+    text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
+    # Split on **bold** spans, keeping the delimiters' content.
+    for i, part in enumerate(re.split(r"\*\*(.+?)\*\*", text)):
+        if not part:
+            continue
+        run = paragraph.add_run(part)
+        run.bold = i % 2 == 1  # odd chunks are the captured bold spans
+
+
 def markdown_to_docx(markdown: str, title: str) -> bytes:
     """Convert simple Markdown to a DOCX file; return the bytes."""
     doc = Document()
@@ -33,41 +46,32 @@ def markdown_to_docx(markdown: str, title: str) -> bytes:
         run.font.size = doc.styles["Title"].font.size
         p.alignment = 1  # center
 
-    in_bullets: list[str] = []
-
-    def _flush_bullets() -> None:
-        nonlocal in_bullets
-        if in_bullets:
-            for line in in_bullets:
-                doc.add_paragraph(line, style="List Bullet")
-            in_bullets = []
-
     for raw_line in markdown.splitlines():
         line = raw_line.rstrip()
         if not line.strip():
-            _flush_bullets()
             continue
 
         # ATX headings.
         heading_match = re.match(r"^(#{1,6})\s+(.*)$", line)
         if heading_match:
-            _flush_bullets()
             level = len(heading_match.group(1))
-            # cap at docx Heading 9 / style names available.
-            style = f"Heading {min(level, 9)}"
+            style = f"Heading {min(level, 9)}"  # docx ships Heading 1..9
             doc.add_paragraph(heading_match.group(2).strip(), style=style)
+            continue
+
+        # Ordered list items (1. 2. …).
+        ordered_match = re.match(r"^\d+[.)]\s+(.*)$", line)
+        if ordered_match:
+            _add_inline(doc.add_paragraph(style="List Number"), ordered_match.group(1).strip())
             continue
 
         # Bullet lines (start with -, *, +).
         bullet_match = re.match(r"^[-*+]\s+(.*)$", line)
         if bullet_match:
-            in_bullets.append(bullet_match.group(1).strip())
+            _add_inline(doc.add_paragraph(style="List Bullet"), bullet_match.group(1).strip())
             continue
 
-        _flush_bullets()
-        doc.add_paragraph(line.strip())
-
-    _flush_bullets()
+        _add_inline(doc.add_paragraph(), line.strip())
 
     buf = io.BytesIO()
     doc.save(buf)

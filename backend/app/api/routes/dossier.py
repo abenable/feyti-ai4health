@@ -21,6 +21,7 @@ from app.services.dossier_service import (
     STATUS_EDITED,
     _safe_filename,
     list_generated_docs,
+    load_extracted_text,
     read_generated,
     read_meta,
     read_status,
@@ -59,16 +60,7 @@ async def generate(request: GenerateRequest):
     if not meta:
         raise HTTPException(status_code=404, detail="Document metadata not found")
 
-    extracted_text = meta.get("extracted_text", "")
-    if not extracted_text:
-        # Load from the original file if metadata lacks extracted text.
-        original = section_dir / meta.get("filename", f"{stem}")
-        if original.exists():
-            from app.services.document_processor import DocumentProcessor
-
-            result = DocumentProcessor().process(original.read_bytes(), original.name)
-            extracted_text = result.full_text
-
+    extracted_text = load_extracted_text(section_dir, meta)
     markdown = await generate_document(extracted_text, meta)
     status_record = read_status(section_dir, stem)
     write_generated(section_dir, stem, markdown, status=STATUS_DRAFT, feedback_history=status_record.get("feedback_history", []))
@@ -111,14 +103,7 @@ async def feedback(request: FeedbackRequest):
         raise HTTPException(status_code=404, detail="Document metadata not found")
 
     prior_markdown = read_generated(section_dir, safe_stem)
-    extracted_text = meta.get("extracted_text", "")
-    if not extracted_text and meta.get("filename"):
-        original = section_dir / meta["filename"]
-        if original.exists():
-            from app.services.document_processor import DocumentProcessor
-
-            result = DocumentProcessor().process(original.read_bytes(), original.name)
-            extracted_text = result.full_text
+    extracted_text = load_extracted_text(section_dir, meta)
 
     new_markdown = await generate_document(
         extracted_text,
@@ -184,10 +169,12 @@ def export_all(format: str = Query("docx")):
         for doc in approved:
             try:
                 section_dir, safe_stem = _stem_file(doc["section_path"], doc["stem"])
-            except HTTPException:
+            except HTTPException as exc:
+                logger.warning("export/all: skipping %s/%s — %s", doc.get("section_path"), doc.get("stem"), exc.detail)
                 continue
             markdown = read_generated(section_dir, safe_stem)
             if not markdown:
+                logger.warning("export/all: skipping %s/%s — no generated markdown", doc.get("section_path"), doc.get("stem"))
                 continue
             docx_bytes = markdown_to_docx(markdown, doc.get("title", safe_stem))
             zf.writestr(f"{safe_stem}.docx", docx_bytes)

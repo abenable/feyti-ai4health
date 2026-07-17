@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from app.services import llm
 from app.services.ctd_map import CTD_MAP
 
@@ -86,11 +88,13 @@ def _build_prompt(
 
 
 def _strip_placeholders(text: str) -> str:
-    """Remove any literal placeholder markup the model may have emitted."""
-    cleaned = text.replace("[placeholder]", "").replace("[Placeholder]", "")
-    cleaned = cleaned.replace("[PLACEHOLDER]", "")
-    # Drop lines that are now entirely whitespace.
-    return "\n".join(line for line in cleaned.splitlines() if line.strip()).strip()
+    """Remove any literal placeholder markup the model may have emitted,
+    without destroying Markdown paragraph structure (blank lines matter)."""
+    cleaned = re.sub(r"\[placeholder\]", "", text, flags=re.IGNORECASE)
+    # Collapse runs of 3+ newlines (which placeholder removal can create) down
+    # to a single blank line; keep the single blank lines that separate blocks.
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
 
 
 async def generate_document(
@@ -101,7 +105,9 @@ async def generate_document(
 ) -> str:
     """Generate (or regenerate) a CTD section Markdown document."""
     prompt = _build_prompt(extracted_text, classification, prior_markdown, feedback)
-    raw = await llm.generate_text(prompt)
+    # A full CTD section can be long; lift the provider's default cap so the
+    # document isn't truncated mid-section. 8192 is DeepSeek's max.
+    raw = await llm.generate_text(prompt, max_tokens=8192)
     return _strip_placeholders(raw)
 
 
@@ -124,7 +130,7 @@ if __name__ == "__main__":  # ponytail self-check
         # Avoid network in self-check by patching llm.generate_text.
         import app.services.llm as llm_module
 
-        async def fake_generate_text(prompt: str) -> str:
+        async def fake_generate_text(prompt: str, max_tokens: int | None = None) -> str:
             return (
                 f"# {classification['title']}\n\n"
                 "## 3.2.P.8.3 Stability Data\n\n"
@@ -138,6 +144,8 @@ if __name__ == "__main__":  # ponytail self-check
         first_h1 = result.splitlines()[0].strip()
         assert first_h1 == f"# {classification['title']}", first_h1
         assert "[placeholder]" not in result.lower()
-        print("OK — generate_document produces titled, placeholder-free Markdown")
+        # #2 guard: paragraph-separating blank lines must survive stripping.
+        assert "\n\n" in result, "blank lines (paragraph structure) were destroyed"
+        print("OK — generate_document produces titled, placeholder-free, structured Markdown")
 
     asyncio.run(_self_check())

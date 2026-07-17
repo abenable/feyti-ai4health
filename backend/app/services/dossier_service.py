@@ -143,6 +143,24 @@ def read_meta(section_dir: Path, stem: str) -> dict:
     return json.loads(path.read_text()) if path.exists() else {}
 
 
+def load_extracted_text(section_dir: Path, meta: dict) -> str:
+    """Return the document's extracted text, preferring the stored copy.
+
+    Falls back to re-running the OCR pipeline on the original file only for
+    documents filed before extracted_text was persisted in meta.
+    """
+    text = meta.get("extracted_text", "")
+    if text:
+        return text
+    filename = meta.get("filename")
+    original = section_dir / filename if filename else None
+    if original and original.exists():
+        from app.services.document_processor import DocumentProcessor
+
+        return DocumentProcessor().process(original.read_bytes(), original.name).full_text
+    return ""
+
+
 def list_generated_docs() -> list[dict]:
     """Return every generated document + status across the dossier."""
     docs: list[dict] = []
@@ -198,6 +216,9 @@ def file_into_dossier(file_bytes, filename, classification, extracted_text) -> d
         "summary": classification.get("summary", ""),
         "key_points": classification.get("key_points", []),
         "extracted_chars": len(extracted_text),
+        # Persist the full extracted text so regeneration/feedback never has to
+        # re-run the (slow, paid) OCR pipeline on the original file.
+        "extracted_text": extracted_text,
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
     }
     (section_dir / f"{stem}.meta.json").write_text(json.dumps(meta, indent=2))
