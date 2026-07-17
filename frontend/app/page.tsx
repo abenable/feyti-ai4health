@@ -16,6 +16,10 @@ import {
   FolderOpen,
   MessageSquare,
   ClipboardCheck,
+  Pill,
+  Save,
+  Loader2,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -28,6 +32,7 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
   Tooltip,
@@ -36,6 +41,34 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DossierTreePanel } from "@/components/dossier-tree";
+
+interface ProductContext {
+  product_name: string;
+  active_ingredient: string;
+  dosage_form: string;
+  strength: string;
+  applicant: string;
+  market: string;
+}
+
+const EMPTY_CONTEXT: ProductContext = {
+  product_name: "",
+  active_ingredient: "",
+  dosage_form: "",
+  strength: "",
+  applicant: "",
+  market: "",
+};
+
+// Field metadata drives the form so we don't hand-write six near-identical inputs.
+const CONTEXT_FIELDS: { key: keyof ProductContext; label: string; placeholder: string }[] = [
+  { key: "product_name", label: "Product name", placeholder: "e.g. Povidone Oral Tablet" },
+  { key: "active_ingredient", label: "Active ingredient(s)", placeholder: "e.g. Povidone" },
+  { key: "dosage_form", label: "Dosage form", placeholder: "e.g. Tablet" },
+  { key: "strength", label: "Strength", placeholder: "e.g. 500 mg" },
+  { key: "applicant", label: "Applicant / manufacturer", placeholder: "e.g. Acme Pharma Ltd" },
+  { key: "market", label: "Target market / authority", placeholder: "e.g. Uganda (NDA)" },
+];
 
 interface ProcessResponse {
   filename: string;
@@ -109,6 +142,8 @@ export default function Home() {
   const [status, setStatus] = useState<"idle" | "analyzing" | "success" | "error">("idle");
   const [result, setResult] = useState<ProcessResponse | null>(null);
   const [dossierTree, setDossierTree] = useState<DossierTree[] | null>(null);
+  const [context, setContext] = useState<ProductContext>(EMPTY_CONTEXT);
+  const [savingContext, setSavingContext] = useState(false);
   const [flashName, setFlashName] = useState<string | null>(null);
   const [isBackendOnline, setIsBackendOnline] = useState<boolean | null>(null);
 
@@ -135,6 +170,48 @@ export default function Home() {
     const intervalId = setInterval(checkHealth, 60000);
     return () => clearInterval(intervalId);
   }, []);
+
+  // Load the already-filed dossier + saved product context on mount so a
+  // refresh doesn't start from zero — the backend filesystem is the source of truth.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [treeRes, ctxRes] = await Promise.all([
+          fetch(getApiUrl("/api/v1/dossier/tree")),
+          fetch(getApiUrl("/api/v1/dossier/context")),
+        ]);
+        if (treeRes.ok) setDossierTree(await treeRes.json());
+        if (ctxRes.ok) {
+          const saved = await ctxRes.json();
+          // Don't clobber anything the user already typed while this was loading.
+          setContext((cur) =>
+            Object.values(cur).some((v) => v)
+              ? cur
+              : { ...EMPTY_CONTEXT, ...saved },
+          );
+        }
+      } catch {
+        /* backend offline; the health check drives the offline messaging */
+      }
+    })();
+  }, []);
+
+  const saveContext = useCallback(async () => {
+    setSavingContext(true);
+    try {
+      const res = await fetch(getApiUrl("/api/v1/dossier/context"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(context),
+      });
+      if (!res.ok) throw new Error("Failed to save product details.");
+      toast.success("Product details saved.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSavingContext(false);
+    }
+  }, [context]);
 
   const handleUpload = useCallback(async (fileToUpload: File) => {
     setResult(null);
@@ -309,6 +386,55 @@ export default function Home() {
             </div>
           </motion.div>
         </header>
+
+        {/* Product context — starting details that ground the whole dossier */}
+        <section className="w-full max-w-6xl mx-auto pb-8 relative z-10">
+          <details open className="group rounded-3xl border border-slate-200/60 bg-white/80 backdrop-blur-xl shadow-xl shadow-indigo-100/20 overflow-hidden">
+            <summary className="flex items-center justify-between gap-3 cursor-pointer list-none select-none px-6 sm:px-8 py-5 bg-slate-50/50 border-b border-slate-100/60">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600">
+                  <Pill className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-serif text-lg text-slate-800">Product details</h3>
+                  <p className="text-sm text-slate-500">
+                    Fill these in first — they ground classification and every generated document.
+                  </p>
+                </div>
+              </div>
+              <ChevronDown className="w-5 h-5 text-slate-400 transition-transform group-open:rotate-180" />
+            </summary>
+
+            <div className="p-6 sm:p-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {CONTEXT_FIELDS.map((f) => (
+                  <label key={f.key} className="flex flex-col gap-1.5">
+                    <span className="text-xs font-medium text-slate-600">{f.label}</span>
+                    <input
+                      type="text"
+                      value={context[f.key]}
+                      placeholder={f.placeholder}
+                      onChange={(e) =>
+                        setContext((prev) => ({ ...prev, [f.key]: e.target.value }))
+                      }
+                      className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                    />
+                  </label>
+                ))}
+              </div>
+              <div className="mt-5 flex justify-end">
+                <Button onClick={saveContext} disabled={savingContext} size="sm">
+                  {savingContext ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Save details
+                </Button>
+              </div>
+            </div>
+          </details>
+        </section>
 
         <main className="flex-1 w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-20 pb-12">
           {/* Left Column: Info & How it works */}

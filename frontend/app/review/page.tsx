@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import {
   ArrowLeft,
   Check,
+  ChevronRight,
   Download,
   Edit3,
   FileDown,
@@ -15,6 +16,7 @@ import {
   Loader2,
   RefreshCw,
   Save,
+  Sparkles,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -51,7 +53,7 @@ interface ReviewDoc {
   section_path: string;
   title: string;
   stem: string;
-  name: string;
+  filename: string;
   status: "draft" | "edited" | "approved";
   updated_at: string;
 }
@@ -61,6 +63,9 @@ interface DocumentDetail {
   status: "draft" | "edited" | "approved";
   meta: Record<string, unknown>;
 }
+
+// /generate and /feedback return only markdown + status (no meta).
+type GenerateResult = Pick<DocumentDetail, "markdown" | "status">;
 
 function statusClasses(status: string) {
   switch (status) {
@@ -95,8 +100,34 @@ export default function ReviewPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isAugmenting, setIsAugmenting] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+
+  // Group the flat document list into a Module → Section → documents tree.
+  const moduleTree = useMemo(() => {
+    const mods = new Map<string, Map<string, ReviewDoc[]>>();
+    for (const doc of docs) {
+      // section_path is "<module>/<section> <title>"; take the section part.
+      const section =
+        doc.section_path.split("/").slice(1).join("/") || doc.section_path;
+      if (!mods.has(doc.module)) mods.set(doc.module, new Map());
+      const secs = mods.get(doc.module)!;
+      if (!secs.has(section)) secs.set(section, []);
+      secs.get(section)!.push(doc);
+    }
+    // Numeric-aware sort so "2.6.6.10" follows "2.6.6.2", not precedes it.
+    const byNumber = (a: string, b: string) =>
+      a.localeCompare(b, undefined, { numeric: true });
+    return [...mods.entries()]
+      .sort(([a], [b]) => byNumber(a, b))
+      .map(([module, secs]) => ({
+        module,
+        sections: [...secs.entries()]
+          .sort(([a], [b]) => byNumber(a, b))
+          .map(([section, items]) => ({ section, items })),
+      }));
+  }, [docs]);
 
   const fetchDocs = useCallback(async () => {
     setLoading(true);
@@ -180,6 +211,7 @@ export default function ReviewPage() {
 
   const submitFeedback = async () => {
     if (!selected || !feedback.trim()) return;
+    if (!confirmRevertIfApproved()) return;
     setIsRegenerating(true);
     try {
       const res = await fetch(getApiUrl("/api/v1/dossier/feedback"), {
@@ -192,17 +224,9 @@ export default function ReviewPage() {
         }),
       });
       if (!res.ok) throw new Error(await readErrorMessage(res));
-      const data: DocumentDetail = await res.json();
-      setDetail(data);
-      setEditMarkdown(data.markdown);
+      const data: GenerateResult = await res.json();
+      applyRegenerated(selected, data);
       setFeedback("");
-      setDocs((prev) =>
-        prev.map((d) =>
-          d.section_path === selected.section_path && d.stem === selected.stem
-            ? { ...d, status: data.status, updated_at: new Date().toISOString() }
-            : d,
-        ),
-      );
       toast.success("Document regenerated.");
     } catch (err) {
       toast.error(
@@ -210,6 +234,56 @@ export default function ReviewPage() {
       );
     } finally {
       setIsRegenerating(false);
+    }
+  };
+
+  // Regenerating (augment/feedback) resets an approved doc to draft — confirm first.
+  const confirmRevertIfApproved = () =>
+    detail?.status !== "approved" ||
+    window.confirm(
+      "This document is approved. Regenerating it will revert it to draft. Continue?",
+    );
+
+  // Apply a /generate|/feedback result: keep the existing meta (the response
+  // carries only markdown + status), update the viewer and the list row.
+  const applyRegenerated = (doc: ReviewDoc, data: GenerateResult) => {
+    setDetail((prev) =>
+      prev
+        ? { ...prev, markdown: data.markdown, status: data.status }
+        : { markdown: data.markdown, status: data.status, meta: {} },
+    );
+    setEditMarkdown(data.markdown);
+    setDocs((prev) =>
+      prev.map((d) =>
+        d.section_path === doc.section_path && d.stem === doc.stem
+          ? { ...d, status: data.status, updated_at: new Date().toISOString() }
+          : d,
+      ),
+    );
+  };
+
+  const augmentDocument = async () => {
+    if (!selected) return;
+    if (!confirmRevertIfApproved()) return;
+    setIsAugmenting(true);
+    try {
+      const res = await fetch(getApiUrl("/api/v1/dossier/generate"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          section_path: selected.section_path,
+          stem: selected.stem,
+          augment: true,
+        }),
+      });
+      if (!res.ok) throw new Error(await readErrorMessage(res));
+      const data: GenerateResult = await res.json();
+      applyRegenerated(selected, data);
+      toast.success("Document augmented — review the ⚠️ gaps before approving.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to augment.");
+    } finally {
+      setIsAugmenting(false);
     }
   };
 
@@ -365,37 +439,63 @@ export default function ReviewPage() {
                   </Link>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {docs.map((doc) => (
-                    <button
-                      key={`${doc.section_path}/${doc.stem}`}
-                      onClick={() => loadDocument(doc)}
-                      type="button"
-                      className={`w-full text-left rounded-xl border p-3 transition-all ${
-                        selected?.section_path === doc.section_path &&
-                        selected?.stem === doc.stem
-                          ? "border-indigo-400 bg-indigo-50/60 shadow-sm"
-                          : "border-slate-100 bg-white hover:border-indigo-200 hover:bg-indigo-50/30"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <span className="font-medium text-sm text-slate-800 line-clamp-1">
-                          {doc.name}
-                        </span>
-                        <Badge
-                          variant="outline"
-                          className={`text-[10px] px-2 py-0.5 rounded-full capitalize ${statusClasses(doc.status)}`}
-                        >
-                          {doc.status}
-                        </Badge>
+                <div className="space-y-1">
+                  {moduleTree.map((mod) => (
+                    <details key={mod.module} open className="group/mod">
+                      <summary className="flex items-center gap-1.5 cursor-pointer list-none select-none rounded-lg px-2 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                        <ChevronRight className="w-3.5 h-3.5 shrink-0 text-slate-400 transition-transform group-open/mod:rotate-90" />
+                        <span className="line-clamp-1">{mod.module}</span>
+                      </summary>
+
+                      <div className="pl-3 mt-0.5 space-y-0.5 border-l border-slate-100 ml-3">
+                        {mod.sections.map((sec) => (
+                          <details
+                            key={sec.section}
+                            open
+                            className="group/sec"
+                          >
+                            <summary className="flex items-center gap-1.5 cursor-pointer list-none select-none rounded-lg px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-50">
+                              <ChevronRight className="w-3 h-3 shrink-0 text-slate-300 transition-transform group-open/sec:rotate-90" />
+                              <span className="line-clamp-1">{sec.section}</span>
+                            </summary>
+
+                            <div className="pl-3 ml-2.5 border-l border-slate-100 space-y-0.5 mt-0.5">
+                              {sec.items.map((doc) => {
+                                const isSelected =
+                                  selected?.section_path ===
+                                    doc.section_path &&
+                                  selected?.stem === doc.stem;
+                                return (
+                                  <button
+                                    key={`${doc.section_path}/${doc.stem}`}
+                                    onClick={() => loadDocument(doc)}
+                                    type="button"
+                                    className={`w-full text-left rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2 transition-colors ${
+                                      isSelected
+                                        ? "bg-indigo-50 text-indigo-900 ring-1 ring-indigo-200"
+                                        : "text-slate-700 hover:bg-indigo-50/40"
+                                    }`}
+                                  >
+                                    <span className="flex items-center gap-1.5 min-w-0">
+                                      <FileText className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                                      <span className="text-xs line-clamp-1">
+                                        {doc.filename || doc.title || doc.stem}
+                                      </span>
+                                    </span>
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-[9px] px-1.5 py-0 rounded-full capitalize shrink-0 ${statusClasses(doc.status)}`}
+                                    >
+                                      {doc.status}
+                                    </Badge>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </details>
+                        ))}
                       </div>
-                      <div className="text-xs text-slate-500 mb-1">
-                        {doc.module} · {doc.section_path}
-                      </div>
-                      <div className="text-[10px] text-slate-400">
-                        {doc.title} · {new Date(doc.updated_at).toLocaleString()}
-                      </div>
-                    </button>
+                    </details>
                   ))}
                 </div>
               )}
@@ -463,6 +563,20 @@ export default function ReviewPage() {
                           >
                             <Edit3 className="w-4 h-4" />
                             <span className="hidden sm:inline">Edit</span>
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={augmentDocument}
+                            disabled={isAugmenting}
+                            title="Expand sparse content into a complete section; missing data is marked ⚠️ TO BE PROVIDED, never invented."
+                          >
+                            {isAugmenting ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Sparkles className="w-4 h-4" />
+                            )}
+                            <span className="hidden sm:inline">Augment</span>
                           </Button>
                           <Button
                             variant={
