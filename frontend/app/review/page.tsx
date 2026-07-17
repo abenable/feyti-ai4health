@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
@@ -12,7 +12,6 @@ import {
   Edit3,
   FileDown,
   FileText,
-  FolderOpen,
   Loader2,
   RefreshCw,
   Save,
@@ -58,6 +57,26 @@ interface ReviewDoc {
   updated_at: string;
 }
 
+// Full CTD plan: every section, filled or empty.
+interface PlanDoc {
+  section_path: string;
+  stem: string;
+  filename: string;
+  title: string;
+  status: "draft" | "edited" | "approved";
+  updated_at: string;
+}
+interface PlanSection {
+  path: string;
+  title: string;
+  status: "approved" | "in_review" | "empty";
+  documents: PlanDoc[];
+}
+interface PlanModule {
+  module: string;
+  sections: PlanSection[];
+}
+
 interface DocumentDetail {
   markdown: string;
   status: "draft" | "edited" | "approved";
@@ -78,6 +97,23 @@ function statusClasses(status: string) {
   }
 }
 
+// Section-level rollup status → badge classes + label.
+function planStatusClasses(status: string) {
+  switch (status) {
+    case "approved":
+      return "bg-emerald-100 text-emerald-800 border-emerald-200";
+    case "in_review":
+      return "bg-amber-100 text-amber-800 border-amber-200";
+    default: // empty
+      return "bg-slate-50 text-slate-400 border-slate-200";
+  }
+}
+const PLAN_STATUS_LABEL: Record<string, string> = {
+  approved: "approved",
+  in_review: "in review",
+  empty: "empty",
+};
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -90,7 +126,7 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 export default function ReviewPage() {
-  const [docs, setDocs] = useState<ReviewDoc[]>([]);
+  const [plan, setPlan] = useState<PlanModule[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<ReviewDoc | null>(null);
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
@@ -104,50 +140,25 @@ export default function ReviewPage() {
   const [isApproving, setIsApproving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  // Group the flat document list into a Module → Section → documents tree.
-  const moduleTree = useMemo(() => {
-    const mods = new Map<string, Map<string, ReviewDoc[]>>();
-    for (const doc of docs) {
-      // section_path is "<module>/<section> <title>"; take the section part.
-      const section =
-        doc.section_path.split("/").slice(1).join("/") || doc.section_path;
-      if (!mods.has(doc.module)) mods.set(doc.module, new Map());
-      const secs = mods.get(doc.module)!;
-      if (!secs.has(section)) secs.set(section, []);
-      secs.get(section)!.push(doc);
-    }
-    // Numeric-aware sort so "2.6.6.10" follows "2.6.6.2", not precedes it.
-    const byNumber = (a: string, b: string) =>
-      a.localeCompare(b, undefined, { numeric: true });
-    return [...mods.entries()]
-      .sort(([a], [b]) => byNumber(a, b))
-      .map(([module, secs]) => ({
-        module,
-        sections: [...secs.entries()]
-          .sort(([a], [b]) => byNumber(a, b))
-          .map(([section, items]) => ({ section, items })),
-      }));
-  }, [docs]);
+  // Flattened view of every filed document across the plan, for counts/checks.
+  const allDocs = plan.flatMap((m) => m.sections.flatMap((s) => s.documents));
+  const approvedCount = allDocs.filter((d) => d.status === "approved").length;
 
-  const fetchDocs = useCallback(async () => {
-    setLoading(true);
+  const fetchPlan = useCallback(async () => {
     try {
-      const res = await fetch(getApiUrl("/api/v1/dossier/documents"));
+      const res = await fetch(getApiUrl("/api/v1/dossier/plan"));
       if (!res.ok) throw new Error(await readErrorMessage(res));
-      const data: ReviewDoc[] = await res.json();
-      setDocs(data);
+      setPlan(await res.json());
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to load documents.",
-      );
+      toast.error(err instanceof Error ? err.message : "Failed to load plan.");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchDocs();
-  }, [fetchDocs]);
+    fetchPlan();
+  }, [fetchPlan]);
 
   const loadDocument = useCallback(async (doc: ReviewDoc) => {
     setSelected(doc);
@@ -191,13 +202,7 @@ export default function ReviewPage() {
       setDetail((prev) =>
         prev ? { ...prev, markdown: editMarkdown, status: "edited" } : null,
       );
-      setDocs((prev) =>
-        prev.map((d) =>
-          d.section_path === selected.section_path && d.stem === selected.stem
-            ? { ...d, status: "edited", updated_at: new Date().toISOString() }
-            : d,
-        ),
-      );
+      fetchPlan();
       setIsEditing(false);
       toast.success("Changes saved.");
     } catch (err) {
@@ -245,21 +250,15 @@ export default function ReviewPage() {
     );
 
   // Apply a /generate|/feedback result: keep the existing meta (the response
-  // carries only markdown + status), update the viewer and the list row.
-  const applyRegenerated = (doc: ReviewDoc, data: GenerateResult) => {
+  // carries only markdown + status), update the viewer, and refresh the plan.
+  const applyRegenerated = (_doc: ReviewDoc, data: GenerateResult) => {
     setDetail((prev) =>
       prev
         ? { ...prev, markdown: data.markdown, status: data.status }
         : { markdown: data.markdown, status: data.status, meta: {} },
     );
     setEditMarkdown(data.markdown);
-    setDocs((prev) =>
-      prev.map((d) =>
-        d.section_path === doc.section_path && d.stem === doc.stem
-          ? { ...d, status: data.status, updated_at: new Date().toISOString() }
-          : d,
-      ),
-    );
+    fetchPlan();
   };
 
   const augmentDocument = async () => {
@@ -301,13 +300,7 @@ export default function ReviewPage() {
       });
       if (!res.ok) throw new Error(await readErrorMessage(res));
       setDetail((prev) => (prev ? { ...prev, status: "approved" } : null));
-      setDocs((prev) =>
-        prev.map((d) =>
-          d.section_path === selected.section_path && d.stem === selected.stem
-            ? { ...d, status: "approved", updated_at: new Date().toISOString() }
-            : d,
-        ),
-      );
+      fetchPlan();
       toast.success("Document approved.");
     } catch (err) {
       toast.error(
@@ -382,7 +375,7 @@ export default function ReviewPage() {
             variant="outline"
             size="sm"
             onClick={exportAll}
-            disabled={isExporting || docs.every((d) => d.status !== "approved")}
+            disabled={isExporting || approvedCount === 0}
           >
             {isExporting ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -407,96 +400,129 @@ export default function ReviewPage() {
           <Card className="lg:col-span-4 flex flex-col border-slate-200/60 shadow-xl shadow-indigo-100/20 bg-white/80 backdrop-blur-xl rounded-3xl overflow-hidden">
             <CardHeader className="bg-slate-50/50 border-b border-slate-100/60 pb-4 px-5 pt-5">
               <CardTitle className="text-lg font-serif text-slate-800">
-                Generated Documents
+                CTD Dossier Plan
               </CardTitle>
               <CardDescription className="text-sm">
-                {docs.length} {docs.length === 1 ? "document" : "documents"} in
-                queue
+                {allDocs.length} filed · {approvedCount} approved · full CTD tree
               </CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-y-auto p-3 scrollbar-thin">
               {loading ? (
                 <div className="flex items-center justify-center h-40 text-slate-500">
                   <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                  Loading documents...
-                </div>
-              ) : docs.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center px-4 py-12">
-                  <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 mb-4">
-                    <FolderOpen className="w-7 h-7" />
-                  </div>
-                  <p className="text-slate-600 font-medium mb-1">
-                    No generated documents yet.
-                  </p>
-                  <p className="text-sm text-slate-500">
-                    Upload a document on the home page to get started.
-                  </p>
-                  <Link
-                    href="/"
-                    className="mt-4 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[min(var(--radius-md),12px)] text-[0.8rem] font-medium border border-border bg-background hover:bg-muted hover:text-foreground transition-colors"
-                  >
-                    Go to Upload
-                  </Link>
+                  Loading plan...
                 </div>
               ) : (
                 <div className="space-y-1">
-                  {moduleTree.map((mod) => (
-                    <details key={mod.module} open className="group/mod">
-                      <summary className="flex items-center gap-1.5 cursor-pointer list-none select-none rounded-lg px-2 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                        <ChevronRight className="w-3.5 h-3.5 shrink-0 text-slate-400 transition-transform group-open/mod:rotate-90" />
-                        <span className="line-clamp-1">{mod.module}</span>
-                      </summary>
+                  {plan.map((mod) => {
+                    const filled = mod.sections.filter(
+                      (s) => s.status !== "empty",
+                    ).length;
+                    return (
+                      <details
+                        key={mod.module}
+                        open={filled > 0}
+                        className="group/mod"
+                      >
+                        <summary className="flex items-center gap-1.5 cursor-pointer list-none select-none rounded-lg px-2 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                          <ChevronRight className="w-3.5 h-3.5 shrink-0 text-slate-400 transition-transform group-open/mod:rotate-90" />
+                          <span className="line-clamp-1 flex-1">{mod.module}</span>
+                          <span className="text-[10px] font-medium text-slate-400 shrink-0">
+                            {filled}/{mod.sections.length}
+                          </span>
+                        </summary>
 
-                      <div className="pl-3 mt-0.5 space-y-0.5 border-l border-slate-100 ml-3">
-                        {mod.sections.map((sec) => (
-                          <details
-                            key={sec.section}
-                            open
-                            className="group/sec"
-                          >
-                            <summary className="flex items-center gap-1.5 cursor-pointer list-none select-none rounded-lg px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-50">
-                              <ChevronRight className="w-3 h-3 shrink-0 text-slate-300 transition-transform group-open/sec:rotate-90" />
-                              <span className="line-clamp-1">{sec.section}</span>
-                            </summary>
+                        <div className="pl-3 mt-0.5 space-y-0.5 border-l border-slate-100 ml-3">
+                          {mod.sections.map((sec) => {
+                            const badge = (
+                              <Badge
+                                variant="outline"
+                                className={`text-[9px] px-1.5 py-0 rounded-full shrink-0 ${planStatusClasses(sec.status)}`}
+                              >
+                                {PLAN_STATUS_LABEL[sec.status]}
+                              </Badge>
+                            );
+                            const label = (
+                              <span className="min-w-0 flex-1">
+                                <span className="text-[11px] font-medium text-slate-600">
+                                  {sec.path}
+                                </span>{" "}
+                                <span className="text-[11px] text-slate-400 line-clamp-1">
+                                  {sec.title}
+                                </span>
+                              </span>
+                            );
 
-                            <div className="pl-3 ml-2.5 border-l border-slate-100 space-y-0.5 mt-0.5">
-                              {sec.items.map((doc) => {
-                                const isSelected =
-                                  selected?.section_path ===
-                                    doc.section_path &&
-                                  selected?.stem === doc.stem;
-                                return (
-                                  <button
-                                    key={`${doc.section_path}/${doc.stem}`}
-                                    onClick={() => loadDocument(doc)}
-                                    type="button"
-                                    className={`w-full text-left rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2 transition-colors ${
-                                      isSelected
-                                        ? "bg-indigo-50 text-indigo-900 ring-1 ring-indigo-200"
-                                        : "text-slate-700 hover:bg-indigo-50/40"
-                                    }`}
-                                  >
-                                    <span className="flex items-center gap-1.5 min-w-0">
-                                      <FileText className="w-3.5 h-3.5 shrink-0 text-slate-400" />
-                                      <span className="text-xs line-clamp-1">
-                                        {doc.filename || doc.title || doc.stem}
-                                      </span>
-                                    </span>
-                                    <Badge
-                                      variant="outline"
-                                      className={`text-[9px] px-1.5 py-0 rounded-full capitalize shrink-0 ${statusClasses(doc.status)}`}
-                                    >
-                                      {doc.status}
-                                    </Badge>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </details>
-                        ))}
-                      </div>
-                    </details>
-                  ))}
+                            // Empty section: a static, muted row (nothing to open).
+                            if (sec.documents.length === 0) {
+                              return (
+                                <div
+                                  key={sec.path}
+                                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg opacity-60"
+                                >
+                                  <span className="w-3 shrink-0" />
+                                  {label}
+                                  {badge}
+                                </div>
+                              );
+                            }
+
+                            // Filled section: expand to its document(s).
+                            return (
+                              <details key={sec.path} open className="group/sec">
+                                <summary className="flex items-center gap-1.5 cursor-pointer list-none select-none rounded-lg px-2 py-1 hover:bg-slate-50">
+                                  <ChevronRight className="w-3 h-3 shrink-0 text-slate-300 transition-transform group-open/sec:rotate-90" />
+                                  {label}
+                                  {badge}
+                                </summary>
+
+                                <div className="pl-3 ml-2.5 border-l border-slate-100 space-y-0.5 mt-0.5">
+                                  {sec.documents.map((doc) => {
+                                    const isSelected =
+                                      selected?.section_path ===
+                                        doc.section_path &&
+                                      selected?.stem === doc.stem;
+                                    return (
+                                      <button
+                                        key={`${doc.section_path}/${doc.stem}`}
+                                        onClick={() =>
+                                          loadDocument({
+                                            ...doc,
+                                            module: mod.module,
+                                          })
+                                        }
+                                        type="button"
+                                        className={`w-full text-left rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2 transition-colors ${
+                                          isSelected
+                                            ? "bg-indigo-50 text-indigo-900 ring-1 ring-indigo-200"
+                                            : "text-slate-700 hover:bg-indigo-50/40"
+                                        }`}
+                                      >
+                                        <span className="flex items-center gap-1.5 min-w-0">
+                                          <FileText className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                                          <span className="text-xs line-clamp-1">
+                                            {doc.filename ||
+                                              doc.title ||
+                                              doc.stem}
+                                          </span>
+                                        </span>
+                                        <Badge
+                                          variant="outline"
+                                          className={`text-[9px] px-1.5 py-0 rounded-full capitalize shrink-0 ${statusClasses(doc.status)}`}
+                                        >
+                                          {doc.status}
+                                        </Badge>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </details>
+                            );
+                          })}
+                        </div>
+                      </details>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
