@@ -15,6 +15,7 @@ import {
   Folder,
   FolderOpen,
   MessageSquare,
+  ClipboardCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -249,6 +250,14 @@ export default function Home() {
               <MessageSquare className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Chat with Aicyclinder</span>
               <span className="sm:hidden">Chat</span>
+            </Link>
+            <Link
+              href="/review"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm hover:bg-emerald-100 transition-colors"
+            >
+              <ClipboardCheck className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Review Documents</span>
+              <span className="sm:hidden">Review</span>
             </Link>
             {isBackendOnline !== null && (
               <Tooltip>
