@@ -13,6 +13,7 @@ from app.models.schemas import (
     GenerateRequest,
     GenerateResponse,
     GeneratedDoc,
+    ProductContext,
     ReviewStatus,
 )
 from app.services.dossier_service import (
@@ -22,9 +23,11 @@ from app.services.dossier_service import (
     _safe_filename,
     list_generated_docs,
     load_extracted_text,
+    read_context,
     read_generated,
     read_meta,
     read_status,
+    write_context,
     write_generated,
     _resolve_section_dir,
 )
@@ -52,6 +55,19 @@ def dossier_tree():
     return tree()
 
 
+@router.get("/context", response_model=ProductContext)
+def get_context():
+    """Return the dossier's saved product context (empty fields if none)."""
+    return ProductContext(**read_context())
+
+
+@router.put("/context", response_model=ProductContext)
+def put_context(context: ProductContext):
+    """Save the dossier's product context."""
+    write_context(context.model_dump())
+    return context
+
+
 @router.post("/generate", response_model=GenerateResponse)
 async def generate(request: GenerateRequest):
     """Generate or regenerate a CTD section draft."""
@@ -61,7 +77,7 @@ async def generate(request: GenerateRequest):
         raise HTTPException(status_code=404, detail="Document metadata not found")
 
     extracted_text = load_extracted_text(section_dir, meta)
-    markdown = await generate_document(extracted_text, meta)
+    markdown = await generate_document(extracted_text, meta, augment=request.augment)
     status_record = read_status(section_dir, stem)
     write_generated(section_dir, stem, markdown, status=STATUS_DRAFT, feedback_history=status_record.get("feedback_history", []))
     return GenerateResponse(markdown=markdown, status=read_status(section_dir, stem)["status"])

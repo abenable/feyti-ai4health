@@ -11,6 +11,10 @@ from app.core.config import settings
 
 _ROOT = Path(settings.DOSSIER_ROOT)
 
+# Dossier-wide product context (one product per dossier), captured before upload
+# and used to ground classification + generation prompts.
+_CONTEXT_PATH = _ROOT / ".context.json"
+
 # Review states for generated CTD documents.
 STATUS_DRAFT = "draft"
 STATUS_EDITED = "edited"
@@ -185,6 +189,49 @@ def list_generated_docs() -> list[dict]:
             }
         )
     return docs
+
+
+_context_cache: tuple[float, dict] | None = None  # (mtime, value); invalidated on write
+
+
+def read_context() -> dict:
+    """Return the dossier's product context as {str: str}, or {} if none saved.
+
+    Values are coerced to strings so a hand-edited/corrupt file can never break
+    ProductContext validation or prompt formatting downstream. Memoized by file
+    mtime so classify()/generate() don't re-read the file on every call.
+    """
+    global _context_cache
+    if not _CONTEXT_PATH.exists():
+        _context_cache = None
+        return {}
+    mtime = _CONTEXT_PATH.stat().st_mtime
+    if _context_cache and _context_cache[0] == mtime:
+        return _context_cache[1]
+    try:
+        data = json.loads(_CONTEXT_PATH.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    value = {str(k): "" if v is None else str(v) for k, v in data.items()}
+    _context_cache = (mtime, value)
+    return value
+
+
+def write_context(data: dict) -> None:
+    """Persist the dossier's product context."""
+    _ROOT.mkdir(parents=True, exist_ok=True)
+    _CONTEXT_PATH.write_text(json.dumps(data, indent=2))
+
+
+def context_block(header: str) -> str:
+    """Format the saved product context as a prompt block, or '' if empty."""
+    filled = {k: v for k, v in read_context().items() if isinstance(v, str) and v.strip()}
+    if not filled:
+        return ""
+    lines = [f"- {k.replace('_', ' ').title()}: {v.strip()}" for k, v in filled.items()]
+    return header + "\n" + "\n".join(lines)
 
 
 def file_into_dossier(file_bytes, filename, classification, extracted_text) -> dict:

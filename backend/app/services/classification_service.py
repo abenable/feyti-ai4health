@@ -7,6 +7,7 @@ import logging
 
 from app.core.exceptions import DocumentAnalysisError
 from app.services.ctd_map import CTD_MAP
+from app.services.dossier_service import context_block
 from app.services.llm import generate_json
 
 logger = logging.getLogger(__name__)
@@ -47,13 +48,15 @@ async def classify(text: str) -> dict:
     summary/key_points are judge-ready even when the input is raw OCR text.
     """
     catalogue = "\n".join(f"{p}: {t}" for p, t in CTD_MAP.items())
+    product = context_block("PRODUCT CONTEXT (this dossier is for the following product):")
     prompt = (
         "You are a regulatory document analyst for an ICH-M4 CTD dossier.\n"
         "The DOCUMENT text may come from OCR and contain noise — interpret and "
         "silently correct obvious errors as you read.\n"
         "Do two things: (1) pick the ONE best-matching CTD section from the list, "
         "(2) summarize the document.\n\n"
-        f"SECTIONS:\n{catalogue}\n\n"
+        + (f"{product}\n\n" if product else "")
+        + f"SECTIONS:\n{catalogue}\n\n"
         f"DOCUMENT (first 8000 chars):\n{text[:8000]}\n\n"
         "Respond ONLY with JSON:\n"
         '{"section_path": "<exact path from the list, e.g. 3.2.P.8.3>", '

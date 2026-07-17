@@ -50,6 +50,17 @@ class DossierModule(BaseModel):
 # NOTE: in the review/generate models below, `section_path` is the dossier
 # FOLDER path "<module>/<section> <title>" (as returned by /documents), NOT the
 # bare CTD path like "3.2.P.8.3". The bare CTD path lives in meta["section_path"].
+class ProductContext(BaseModel):
+    """Dossier-wide product details, captured before upload to ground the
+    classification and generation prompts. All fields optional."""
+    product_name: str = ""
+    active_ingredient: str = ""
+    dosage_form: str = ""
+    strength: str = ""
+    applicant: str = ""
+    market: str = ""  # target region / regulatory authority
+
+
 class GeneratedDoc(BaseModel):
     section_path: str  # folder path: "<module>/<section> <title>"
     stem: str
@@ -76,6 +87,7 @@ class DocumentDetail(BaseModel):
 class GenerateRequest(BaseModel):
     section_path: str
     stem: str
+    augment: bool = False  # expand sparse source into a complete section w/ gap markers
 
 
 class EditRequest(BaseModel):
