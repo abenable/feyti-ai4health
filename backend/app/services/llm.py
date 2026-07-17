@@ -58,7 +58,7 @@ async def _deepseek(prompt: str, json_mode: bool) -> str:
 
 async def deepseek_chat(
     messages: list[dict],
-    max_tokens: int = 512,
+    max_tokens: int | None = None,
     temperature: float = 0.0,
     json_mode: bool = False,
 ) -> str:
@@ -71,8 +71,9 @@ async def deepseek_chat(
         "model": settings.DEEPSEEK_MODEL,
         "messages": messages,
         "temperature": temperature,
-        "max_tokens": max_tokens,
     }
+    if max_tokens is not None:  # omit → provider's own max (no 512 truncation)
+        payload["max_tokens"] = max_tokens
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
     headers = {"Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}"}
