@@ -83,6 +83,23 @@ class NewSectionResponse(BaseModel):
     status: str
 
 
+class ModuleReadiness(BaseModel):
+    module: str
+    approved: int
+    in_review: int
+    empty: int
+    drafted: int  # approved + in_review (engaged)
+
+
+class ReadinessReport(BaseModel):
+    score: int  # 0..100 — approved / engaged
+    verdict_label: str  # ready | nearly | not_ready
+    totals: dict  # approved / in_review / empty / engaged / catalogue
+    open_gaps: int  # total "⚠️ TO BE PROVIDED" markers across drafts
+    modules: list[ModuleReadiness]
+    narrative: str  # AI markdown: verdict + blockers + next actions
+
+
 class ProductContext(BaseModel):
     """Dossier-wide product details, captured before upload to ground the
     classification and generation prompts. All fields optional."""

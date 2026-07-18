@@ -12,6 +12,7 @@ import {
   Edit3,
   FileDown,
   FileText,
+  Gauge,
   Loader2,
   RefreshCw,
   Save,
@@ -93,6 +94,49 @@ interface NewSectionResponse {
   status: "draft" | "edited" | "approved";
 }
 
+interface ModuleReadiness {
+  module: string;
+  approved: number;
+  in_review: number;
+  empty: number;
+  drafted: number;
+}
+interface ReadinessReport {
+  score: number;
+  verdict_label: "ready" | "nearly" | "not_ready";
+  totals: {
+    approved: number;
+    in_review: number;
+    empty: number;
+    engaged: number;
+    catalogue: number;
+  };
+  open_gaps: number;
+  modules: ModuleReadiness[];
+  narrative: string;
+}
+
+// Labels describe completion of DRAFTED sections, not overall submission
+// coverage — the score is approved/drafted, so it can't promise the dossier is
+// submission-ready. The empty count + AI narrative carry the coverage judgment.
+const VERDICT_META: Record<string, { label: string; text: string; ring: string }> = {
+  ready: {
+    label: "All drafts approved",
+    text: "text-emerald-700",
+    ring: "ring-emerald-200 bg-emerald-50",
+  },
+  nearly: {
+    label: "Mostly approved",
+    text: "text-amber-700",
+    ring: "ring-amber-200 bg-amber-50",
+  },
+  not_ready: {
+    label: "Drafting in progress",
+    text: "text-rose-700",
+    ring: "ring-rose-200 bg-rose-50",
+  },
+};
+
 function statusClasses(status: string) {
   switch (status) {
     case "approved":
@@ -153,6 +197,10 @@ export default function ReviewPage() {
     module: string;
   } | null>(null);
   const [creating, setCreating] = useState<"blank" | "ai" | null>(null);
+  // AI submission-readiness report (modal).
+  const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
+  const [readinessOpen, setReadinessOpen] = useState(false);
+  const [readinessLoading, setReadinessLoading] = useState(false);
 
   // Flattened view of every filed document across the plan, for counts/checks.
   const allDocs = plan.flatMap((m) => m.sections.flatMap((s) => s.documents));
@@ -173,6 +221,16 @@ export default function ReviewPage() {
   useEffect(() => {
     fetchPlan();
   }, [fetchPlan]);
+
+  // Close the readiness modal on Escape.
+  useEffect(() => {
+    if (!readinessOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setReadinessOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [readinessOpen]);
 
   const loadDocument = useCallback(async (doc: ReviewDoc) => {
     setNewSection(null);
@@ -387,6 +445,23 @@ export default function ReviewPage() {
     }
   };
 
+  const openReadiness = async () => {
+    setReadinessOpen(true);
+    setReadinessLoading(true);
+    try {
+      const res = await fetch(getApiUrl("/api/v1/dossier/readiness"));
+      if (!res.ok) throw new Error(await readErrorMessage(res));
+      setReadiness(await res.json());
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to analyze readiness.",
+      );
+      setReadinessOpen(false);
+    } finally {
+      setReadinessLoading(false);
+    }
+  };
+
   const exportAll = async () => {
     setIsExporting(true);
     try {
@@ -429,6 +504,19 @@ export default function ReviewPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={openReadiness}
+            disabled={readinessLoading}
+          >
+            {readinessLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Gauge className="w-4 h-4" />
+            )}
+            <span className="hidden sm:inline">Readiness</span>
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -858,6 +946,131 @@ export default function ReviewPage() {
           </Card>
         </div>
       </main>
+
+      {/* AI submission-readiness report */}
+      <AnimatePresence>
+        {readinessOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => setReadinessOpen(false)}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Submission readiness report"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-2xl max-h-[85vh] flex flex-col bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden"
+            >
+              <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600">
+                    <Gauge className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="font-serif text-lg text-slate-800 leading-none">
+                      Submission Readiness
+                    </h2>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      AI analysis of your CTD dossier
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReadinessOpen(false)}
+                  className="text-slate-400 hover:text-slate-700 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto scrollbar-thin p-6">
+                {readinessLoading || !readiness ? (
+                  <div className="flex flex-col items-center justify-center h-48 text-slate-500 gap-2">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span className="text-sm">Analyzing dossier…</span>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* Score + verdict */}
+                    <div
+                      className={`flex items-center gap-5 rounded-2xl ring-1 p-5 ${VERDICT_META[readiness.verdict_label].ring}`}
+                    >
+                      <div className="text-center shrink-0">
+                        <div className="text-4xl font-bold font-serif text-slate-800 leading-none">
+                          {readiness.score}
+                          <span className="text-lg text-slate-400">%</span>
+                        </div>
+                        <div className="text-[10px] uppercase tracking-wider text-slate-400 mt-1">
+                          approved / drafted
+                        </div>
+                      </div>
+                      <div className="min-w-0">
+                        <div
+                          className={`font-semibold ${VERDICT_META[readiness.verdict_label].text}`}
+                        >
+                          {VERDICT_META[readiness.verdict_label].label}
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1">
+                          {readiness.totals.approved} approved ·{" "}
+                          {readiness.totals.in_review} in review ·{" "}
+                          {readiness.totals.empty} empty · {readiness.open_gaps}{" "}
+                          open ⚠️ gap
+                          {readiness.open_gaps === 1 ? "" : "s"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Per-module bars */}
+                    <div className="space-y-2.5">
+                      {readiness.modules.map((m) => {
+                        const total = m.approved + m.in_review + m.empty || 1;
+                        return (
+                          <div key={m.module}>
+                            <div className="flex items-center justify-between text-[11px] mb-1">
+                              <span className="font-medium text-slate-600 line-clamp-1">
+                                {m.module}
+                              </span>
+                              <span className="text-slate-400 shrink-0 ml-2">
+                                {m.drafted}/{total} drafted
+                              </span>
+                            </div>
+                            <div className="flex h-2 rounded-full overflow-hidden bg-slate-100">
+                              <div
+                                className="bg-emerald-500"
+                                style={{
+                                  width: `${(m.approved / total) * 100}%`,
+                                }}
+                              />
+                              <div
+                                className="bg-amber-400"
+                                style={{
+                                  width: `${(m.in_review / total) * 100}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* AI narrative */}
+                    <div className="prose prose-sm prose-slate max-w-none prose-headings:font-serif border-t border-slate-100 pt-4">
+                      <ReactMarkdown>{readiness.narrative}</ReactMarkdown>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

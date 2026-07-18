@@ -194,19 +194,24 @@ def list_generated_docs() -> list[dict]:
     return docs
 
 
-def build_plan() -> list[dict]:
+def build_plan(docs: list[dict] | None = None) -> list[dict]:
     """Merge the full CTD catalogue with filed documents into a completion map.
 
     Every CTD section is returned (even with no document), grouped by module,
     each carrying a rollup status: 'approved' (all its docs approved),
     'in_review' (has docs, not all approved), or 'empty' (no document yet).
+
+    Pass `docs` (a prior list_generated_docs() result) to avoid re-walking the
+    dossier when the caller already has it.
     """
     from collections import defaultdict
 
     from app.services.ctd_map import CTD_MAP, MODULE_NAMES
 
+    if docs is None:
+        docs = list_generated_docs()
     docs_by_path: dict[str, list] = defaultdict(list)
-    for d in list_generated_docs():
+    for d in docs:
         docs_by_path[d["ctd_path"]].append(d)
 
     modules: dict[str, list] = {}

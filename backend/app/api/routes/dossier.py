@@ -17,6 +17,7 @@ from app.models.schemas import (
     NewSectionResponse,
     PlanModule,
     ProductContext,
+    ReadinessReport,
     ReviewStatus,
 )
 from app.services.dossier_service import (
@@ -97,6 +98,14 @@ def documents():
 def plan():
     """Full CTD catalogue merged with filed documents (approved/in_review/empty)."""
     return build_plan()
+
+
+@router.get("/readiness", response_model=ReadinessReport)
+async def readiness():
+    """AI submission-readiness report: deterministic score + AI verdict/blockers."""
+    from app.services.readiness_service import analyze_readiness
+
+    return await analyze_readiness()
 
 
 @router.post("/section", response_model=NewSectionResponse)
