@@ -3,12 +3,13 @@ import zipfile
 from io import BytesIO
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from app.models.schemas import (
     DossierModule,
     DocumentDetail,
     EditRequest,
+    ExtractedField,
     FeedbackRequest,
     GenerateRequest,
     GenerateResponse,
@@ -18,7 +19,11 @@ from app.models.schemas import (
     PlanModule,
     ProductContext,
     ReadinessReport,
+    ReclassifyRequest,
+    ReclassifyResponse,
     ReviewStatus,
+    SourceDoc,
+    ValidationReport,
 )
 from app.services.dossier_service import (
     STATUS_APPROVED,
@@ -29,16 +34,20 @@ from app.services.dossier_service import (
     create_section_document,
     list_generated_docs,
     load_extracted_text,
+    reclassify_document,
     read_context,
     read_generated,
     read_meta,
     read_status,
     write_context,
+    write_fields,
     write_generated,
     _resolve_section_dir,
 )
 from app.services.export_service import markdown_to_docx
+from app.services.extraction_service import extract_fields
 from app.services.generation_service import generate_document
+from app.services.validation_service import run_checks, validate_document
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -87,6 +96,38 @@ async def generate(request: GenerateRequest):
     status_record = read_status(section_dir, stem)
     write_generated(section_dir, stem, markdown, status=STATUS_DRAFT, feedback_history=status_record.get("feedback_history", []))
     return GenerateResponse(markdown=markdown, status=read_status(section_dir, stem)["status"])
+
+
+@router.post("/extract", response_model=list[ExtractedField])
+async def extract(request: GenerateRequest):
+    """(Re-)run structured field extraction for an already-filed document."""
+    section_dir, stem = _stem_file(request.section_path, request.stem)
+    meta = read_meta(section_dir, stem)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Document metadata not found")
+
+    extracted_text = load_extracted_text(section_dir, meta)
+    fields = await extract_fields(extracted_text, meta)
+    write_fields(section_dir, stem, fields)
+    return [ExtractedField(**f) for f in fields]
+
+
+@router.post("/reclassify", response_model=ReclassifyResponse)
+def reclassify(request: ReclassifyRequest):
+    """Move a mis-filed document to a different CTD section."""
+    section_dir, stem = _stem_file(request.section_path, request.stem)
+    from app.services.ctd_map import CTD_MAP, MODULE_NAMES
+
+    title = CTD_MAP.get(request.ctd_path)
+    if title is None:
+        raise HTTPException(status_code=404, detail=f"Unknown CTD section: {request.ctd_path}")
+    module = MODULE_NAMES.get(request.ctd_path.split(".")[0], "Other")
+
+    try:
+        result = reclassify_document(section_dir, stem, request.ctd_path, title, module)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return ReclassifyResponse(**result)
 
 
 @router.get("/documents", response_model=list[GeneratedDoc])
@@ -143,6 +184,41 @@ async def create_section(request: NewSectionRequest):
     )
 
 
+@router.get("/source", response_model=SourceDoc)
+def source(section_path: str = Query(...), stem: str = Query(...)):
+    """Page-indexed extracted text for the source viewer (empty pages → single
+    pseudo-page from extracted_text for documents filed before this existed)."""
+    section_dir, safe_stem = _stem_file(section_path, stem)
+    meta = read_meta(section_dir, safe_stem)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Document metadata not found")
+
+    pages = meta.get("pages") or []
+    if not pages and meta.get("extracted_text"):
+        pages = [{"page": 1, "text": meta["extracted_text"], "is_ocr": meta.get("had_ocr", False)}]
+
+    return SourceDoc(
+        pages=pages,
+        had_ocr=meta.get("had_ocr", False),
+        extracted_chars=meta.get("extracted_chars", 0),
+        filename=meta.get("filename", ""),
+    )
+
+
+@router.get("/original")
+def original(section_path: str = Query(...), stem: str = Query(...)):
+    """Download the original uploaded file (source of the extracted text)."""
+    section_dir, safe_stem = _stem_file(section_path, stem)
+    meta = read_meta(section_dir, safe_stem)
+    filename = meta.get("filename")
+    if not filename:
+        raise HTTPException(status_code=404, detail="No original file for this document (authored section).")
+    file_path = section_dir / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Original file is missing from disk.")
+    return FileResponse(file_path, filename=filename)
+
+
 @router.get("/document", response_model=DocumentDetail)
 def document(section_path: str = Query(...), stem: str = Query(...)):
     section_dir, safe_stem = _stem_file(section_path, stem)
@@ -192,11 +268,37 @@ async def feedback(request: FeedbackRequest):
     return GenerateResponse(markdown=new_markdown, status=read_status(section_dir, safe_stem)["status"])
 
 
-@router.post("/approve", response_model=ReviewStatus)
-def approve(request: GenerateRequest):
-    section_dir, safe_stem = _stem_file(request.section_path, request.stem)
-    status_record = read_status(section_dir, safe_stem)
+@router.get("/validate", response_model=ValidationReport)
+async def validate(section_path: str = Query(...), stem: str = Query(...)):
+    """Output validation: deterministic checks + AI unsupported-claims pass.
+    Approve is gated on this report having zero error-level checks."""
+    section_dir, safe_stem = _stem_file(section_path, stem)
+    meta = read_meta(section_dir, safe_stem)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Document metadata not found")
+
     markdown = read_generated(section_dir, safe_stem)
+    extracted_text = load_extracted_text(section_dir, meta)
+    report = await validate_document(markdown, extracted_text, meta)
+    return ValidationReport(**report)
+
+
+@router.post("/approve", response_model=ReviewStatus)
+async def approve(request: GenerateRequest):
+    section_dir, safe_stem = _stem_file(request.section_path, request.stem)
+    meta = read_meta(section_dir, safe_stem)
+    markdown = read_generated(section_dir, safe_stem)
+
+    checks = run_checks(markdown, meta)
+    errors = [c for c in checks if c["level"] == "error"]
+    if errors:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Cannot approve: {len(errors)} unresolved validation error(s). "
+                    "Run /dossier/validate for details.",
+        )
+
+    status_record = read_status(section_dir, safe_stem)
     write_generated(
         section_dir,
         safe_stem,

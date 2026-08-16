@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, KeyboardEvent } from "react";
+import { useState, useRef, useEffect, useCallback, Suspense, KeyboardEvent } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Send,
@@ -12,16 +13,13 @@ import {
   Wifi,
   WifiOff,
   FlaskConical,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 
-// Empty by default: same-origin relative calls proxied server-side by Next.js
-// rewrites to the internal backend (see next.config.ts).
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, "") ?? "";
-
-const SYSTEM_PROMPT =
-  "You are Aicyclinder, a precise pharmaceutical regulatory assistant.";
+import { apiJson, getApiUrl } from "@/lib/api";
+import type { ChatMessage } from "@/lib/types";
 
 const SUGGESTIONS = [
   "Draft Module 3.2.S.1.1 Nomenclature for Lamivudine including INN, IUPAC name, and CAS.",
@@ -30,28 +28,14 @@ const SUGGESTIONS = [
   "Explain the difference between a Type IA and Type IB variation.",
 ];
 
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
-function getApiUrl(path: string) {
-  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
-}
-
-async function readErrorMessage(response: Response) {
-  try {
-    const payload = (await response.json()) as { detail?: string };
-    if (payload.detail) return payload.detail;
-  } catch {
-    /* non-JSON error */
-  }
-  return `Request failed with status ${response.status}.`;
-}
-
 type Mode = "aicyclinder" | "cloud";
 
-export default function ChatPage() {
+function ChatPageInner() {
+  const searchParams = useSearchParams();
+  const sectionPath = searchParams.get("section_path") ?? undefined;
+  const stem = searchParams.get("stem") ?? undefined;
+  const grounded = Boolean(sectionPath && stem);
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -64,10 +48,7 @@ export default function ChatPage() {
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        const res = await fetch(
-          getApiUrl(`/api/v1/chat/health?provider=${mode}`),
-          { cache: "no-store" },
-        );
+        const res = await fetch(getApiUrl(`/api/v1/chat/health?provider=${mode}`), { cache: "no-store" });
         setIsModelOnline(res.ok);
       } catch {
         setIsModelOnline(false);
@@ -81,10 +62,7 @@ export default function ChatPage() {
 
   // Auto-scroll to the newest message.
   useEffect(() => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: "smooth",
-    });
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, isSending]);
 
   const send = useCallback(
@@ -92,52 +70,32 @@ export default function ChatPage() {
       const trimmed = text.trim();
       if (!trimmed || isSending) return;
 
-      const nextMessages: ChatMessage[] = [
-        ...messages,
-        { role: "user", content: trimmed },
-      ];
+      const nextMessages: ChatMessage[] = [...messages, { role: "user", content: trimmed }];
       setMessages(nextMessages);
       setInput("");
       setIsSending(true);
 
       try {
-        const res = await fetch(getApiUrl("/api/v1/chat"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: [
-              { role: "system", content: SYSTEM_PROMPT },
-              ...nextMessages,
-            ],
-            max_new_tokens: 512,
-            temperature: 0.0,
-            provider: mode,
-          }),
-        });
-
-        if (!res.ok) {
-          if (res.status === 503) setIsModelOnline(false);
-          throw new Error(await readErrorMessage(res));
-        }
-
-        const data: { response: string } = await res.json();
+        const data = await apiJson("/api/v1/chat", "POST", {
+          messages: nextMessages,
+          max_new_tokens: 512,
+          temperature: 0.0,
+          provider: mode,
+          section_path: sectionPath,
+          stem,
+        }) as { response: string };
         setIsModelOnline(true);
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: data.response || "*(empty response)*" },
-        ]);
+        setMessages((prev) => [...prev, { role: "assistant", content: data.response || "*(empty response)*" }]);
       } catch (err: unknown) {
         setMessages((prev) => prev.slice(0, -1)); // drop the unanswered user turn
         setInput(trimmed); // restore their text so they can retry
-        toast.error(
-          err instanceof Error ? err.message : "Failed to reach the model.",
-        );
+        toast.error(err instanceof Error ? err.message : "Failed to reach the model.");
       } finally {
         setIsSending(false);
         textareaRef.current?.focus();
       }
     },
-    [messages, isSending, mode],
+    [messages, isSending, mode, sectionPath, stem],
   );
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -146,6 +104,8 @@ export default function ChatPage() {
       send(input);
     }
   };
+
+  const backLink = grounded ? `/dossier/${sectionPath}?stem=${encodeURIComponent(stem!)}` : "/dossier";
 
   return (
     <div className="min-h-screen bg-slate-50/50 text-slate-900 flex flex-col relative overflow-hidden">
@@ -162,12 +122,8 @@ export default function ChatPage() {
             <Bot className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="font-serif text-2xl font-bold text-slate-900 leading-none">
-              Aicyclinder
-            </h1>
-            <p className="text-xs text-slate-500 font-medium tracking-wide uppercase mt-1">
-              Regulatory AI · Feyti
-            </p>
+            <h1 className="font-serif text-2xl font-bold text-slate-900 leading-none">Aicyclinder</h1>
+            <p className="text-xs text-slate-500 font-medium tracking-wide uppercase mt-1">Regulatory AI · Feyti</p>
           </div>
         </div>
 
@@ -186,9 +142,7 @@ export default function ChatPage() {
                 onClick={() => setMode(value)}
                 className={
                   "px-3 py-1 rounded-full text-xs font-semibold transition-colors " +
-                  (mode === value
-                    ? "bg-white text-indigo-700 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700")
+                  (mode === value ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-700")
                 }
               >
                 {label}
@@ -199,48 +153,43 @@ export default function ChatPage() {
             <span
               className={
                 "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider border shadow-sm " +
-                (isModelOnline
-                  ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                  : "bg-red-50 border-red-200 text-red-700")
+                (isModelOnline ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-red-50 border-red-200 text-red-700")
               }
             >
-              {isModelOnline ? (
-                <Wifi className="w-3.5 h-3.5" />
-              ) : (
-                <WifiOff className="w-3.5 h-3.5" />
-              )}
-              <span className="hidden sm:inline">
-                {isModelOnline ? "Model Online" : "Model Offline"}
-              </span>
+              {isModelOnline ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">{isModelOnline ? "Model Online" : "Model Offline"}</span>
             </span>
           )}
           <Link
-            href="/"
+            href={backLink}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-slate-600 border border-slate-200 bg-white shadow-sm hover:bg-slate-50 hover:text-indigo-600 transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Dossier</span>
+            <span className="hidden sm:inline">{grounded ? "Document" : "Dossier"}</span>
           </Link>
         </div>
       </header>
 
+      {grounded && (
+        <div className="w-full max-w-4xl mx-auto px-6 relative z-10 -mt-2 mb-2">
+          <div className="flex items-center gap-2 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-full px-3 py-1.5 w-fit">
+            <FileText className="w-3.5 h-3.5" />
+            Grounded in the document you were viewing — the assistant sees its current draft.
+          </div>
+        </div>
+      )}
+
       {/* Message thread */}
       <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 relative z-10 flex flex-col min-h-0">
-        <div
-          ref={scrollRef}
-          className="flex-1 overflow-y-auto py-6 space-y-6 scroll-smooth"
-        >
+        <div ref={scrollRef} className="flex-1 overflow-y-auto py-6 space-y-6 scroll-smooth">
           {messages.length === 0 && !isSending ? (
             <div className="h-full flex flex-col items-center justify-center text-center py-16">
               <div className="w-16 h-16 rounded-3xl bg-white border border-slate-200 shadow-sm flex items-center justify-center text-indigo-500 mb-6">
                 <FlaskConical className="w-8 h-8" strokeWidth={1.5} />
               </div>
-              <h2 className="font-serif text-2xl text-slate-800 mb-2">
-                Ask Aicyclinder anything
-              </h2>
+              <h2 className="font-serif text-2xl text-slate-800 mb-2">Ask Aicyclinder anything</h2>
               <p className="text-slate-500 max-w-md mb-8">
-                Our fine-tuned regulatory model, trained on CTD dossiers. Try one
-                of these to start:
+                Our fine-tuned regulatory model, grounded in your dossier. Try one of these to start:
               </p>
               <div className="grid sm:grid-cols-2 gap-3 w-full max-w-2xl">
                 {SUGGESTIONS.map((s) => (
@@ -290,11 +239,7 @@ export default function ChatPage() {
           )}
 
           {isSending && (
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex gap-3 justify-start"
-            >
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3 justify-start">
               <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-sm mt-1">
                 <Bot className="w-4 h-4" />
               </div>
@@ -324,11 +269,7 @@ export default function ChatPage() {
               className="flex-shrink-0 w-11 h-11 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               aria-label="Send message"
             >
-              {isSending ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Send className="w-5 h-5" />
-              )}
+              {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
             </button>
           </div>
           <p className="text-center text-xs text-slate-400 mt-3 flex items-center justify-center gap-1.5">
@@ -338,5 +279,13 @@ export default function ChatPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense>
+      <ChatPageInner />
+    </Suspense>
   );
 }

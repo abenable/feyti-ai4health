@@ -8,7 +8,7 @@ venv/
 out/
 build/
 dist/
-dossier/
+/backend/dossier/
 
 # Environment files
 .env
@@ -35,3 +35,7 @@ yarn-error.log*
 
 # Generated docs
 *.tsbuildinfo
+
+# Design specs / task plans (keep local)
+specs/
+tasks/

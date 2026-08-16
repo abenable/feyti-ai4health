@@ -9,7 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { DossierTree } from "@/app/page";
+import type { DossierTree } from "@/lib/types";
 
 function confidenceColor(confidence: number) {
   if (confidence >= 0.75) return "bg-emerald-500";

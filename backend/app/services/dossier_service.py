@@ -147,6 +147,14 @@ def read_meta(section_dir: Path, stem: str) -> dict:
     return json.loads(path.read_text()) if path.exists() else {}
 
 
+def write_fields(section_dir: Path, stem: str, fields: list[dict]) -> None:
+    """Persist extracted structured fields into the document's meta sidecar."""
+    path = _meta_path(section_dir, stem)
+    meta = json.loads(path.read_text()) if path.exists() else {}
+    meta["fields"] = fields
+    path.write_text(json.dumps(meta, indent=2))
+
+
 def load_extracted_text(section_dir: Path, meta: dict) -> str:
     """Return the document's extracted text, preferring the stored copy.
 
@@ -297,6 +305,9 @@ def create_section_document(ctd_path: str, title: str, module: str, stem: str = 
             "key_points": [],
             "extracted_chars": 0,
             "extracted_text": "",
+            "pages": [],
+            "had_ocr": False,
+            "fields": [],
             "uploaded_at": _now_iso(),
         }, indent=2))
 
@@ -307,7 +318,42 @@ def create_section_document(ctd_path: str, title: str, module: str, stem: str = 
     }
 
 
-def file_into_dossier(file_bytes, filename, classification, extracted_text) -> dict:
+def reclassify_document(section_dir: Path, stem: str, ctd_path: str, title: str, module: str) -> dict:
+    """Move a filed document (source file + meta/status/generated sidecars)
+    into a new CTD section folder, rewriting its classification in meta.
+    Returns {section_path, stem} — the new folder path and stem.
+    """
+    meta_path = _meta_path(section_dir, stem)
+    if not meta_path.exists():
+        raise FileNotFoundError(f"No document found at {section_dir}/{stem}")
+    meta = json.loads(meta_path.read_text())
+
+    new_module_dir = _ROOT / _safe_dir_name(module)
+    new_section_dir = new_module_dir / _safe_dir_name(f"{ctd_path} {title}")
+    new_section_dir.mkdir(parents=True, exist_ok=True)
+    (new_module_dir / ".module.json").write_text(json.dumps({"module": module}))
+
+    meta["section_path"], meta["title"], meta["module"] = ctd_path, title, module
+    meta_path.write_text(json.dumps(meta, indent=2))  # rewrite before move; path changes below
+
+    for path_fn in (_meta_path, _status_path, _generated_path):
+        src = path_fn(section_dir, stem)
+        if src.exists():
+            src.rename(path_fn(new_section_dir, stem))
+
+    original = meta.get("filename")
+    if original:
+        src_file = section_dir / original
+        if src_file.exists():
+            src_file.rename(new_section_dir / original)
+
+    return {
+        "section_path": str(new_section_dir.relative_to(_ROOT)),
+        "stem": stem,
+    }
+
+
+def file_into_dossier(file_bytes, filename, classification, extracted_text, chunks: list[dict] | None = None) -> dict:
     """Write file and metadata under DOSSIER_ROOT/<module>/<section>."""
     name = _safe_filename(filename)
     stem = Path(name).stem
@@ -339,6 +385,11 @@ def file_into_dossier(file_bytes, filename, classification, extracted_text) -> d
         # Persist the full extracted text so regeneration/feedback never has to
         # re-run the (slow, paid) OCR pipeline on the original file.
         "extracted_text": extracted_text,
+        # Page-indexed chunks [{page, text, is_ocr}] — powers the source viewer
+        # and per-field page citations. Empty for documents filed before this.
+        "pages": chunks or [],
+        "had_ocr": any(c.get("is_ocr") for c in (chunks or [])),
+        "fields": [],
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
     }
     (section_dir / f"{stem}.meta.json").write_text(json.dumps(meta, indent=2))
@@ -347,6 +398,9 @@ def file_into_dossier(file_bytes, filename, classification, extracted_text) -> d
         "folder": f"{module}/{section_path} {title}",
         "path": str(file_path),
         "section_path": section_path,
+        # Folder-relative path (sanitized dir names) — what the API's
+        # section_path query param and the frontend route actually need.
+        "folder_path": str(section_dir.relative_to(_ROOT)),
         "section_dir": section_dir,
         "stem": stem,
     }

@@ -1,23 +1,19 @@
 from pydantic import BaseModel
 
 
-class AnalysisMetadata(BaseModel):
-    filename: str
-    content_type: str
-    size_bytes: int
-
-
-class AnalysisResponse(BaseModel):
-    summary: str
-    metadata: AnalysisMetadata
-
-
 class Classification(BaseModel):
     section_path: str
     title: str
     module: str
     confidence: float
     justification: str
+
+
+class ExtractedField(BaseModel):
+    label: str
+    value: str
+    page: int = 0
+    confidence: float = 0.0
 
 
 class ProcessResponse(BaseModel):
@@ -27,7 +23,23 @@ class ProcessResponse(BaseModel):
     classification: Classification
     summary: str = ""
     key_points: list[str] = []
+    fields: list[ExtractedField] = []
     dossier_folder: str
+    section_path: str = ""  # folder path, so the frontend can deep-link into the workspace
+    stem: str = ""
+
+
+class SourcePage(BaseModel):
+    page: int
+    text: str
+    is_ocr: bool = False
+
+
+class SourceDoc(BaseModel):
+    pages: list[SourcePage]
+    had_ocr: bool
+    extracted_chars: int
+    filename: str
 
 
 class DossierDocument(BaseModel):
@@ -76,6 +88,17 @@ class NewSectionRequest(BaseModel):
     augment: bool = False  # True → AI-author a skeleton; False → blank to write
 
 
+class ReclassifyRequest(BaseModel):
+    section_path: str  # current folder path
+    stem: str
+    ctd_path: str  # new bare CTD path to move the document to
+
+
+class ReclassifyResponse(BaseModel):
+    section_path: str  # new folder path
+    stem: str
+
+
 class NewSectionResponse(BaseModel):
     section_path: str  # folder path, for loading/editing the new document
     stem: str
@@ -120,6 +143,20 @@ class GeneratedDoc(BaseModel):
     status: str
     updated_at: str
     feedback_count: int
+
+
+class ValidationCheck(BaseModel):
+    id: str
+    level: str  # "error" | "warn"
+    message: str
+    line: int | None = None
+
+
+class ValidationReport(BaseModel):
+    checks: list[ValidationCheck]
+    open_gaps: int
+    score: int  # 0..100, deterministic
+    narrative: str  # AI markdown: unsupported-claim flags
 
 
 class ReviewStatus(BaseModel):
@@ -168,6 +205,10 @@ class ChatRequest(BaseModel):
     temperature: float = 0.0
     # "aicyclinder" = hosted fine-tuned model; "cloud" = DeepSeek (kept internal).
     provider: str = "aicyclinder"
+    # Optional: when chat is opened from a document workspace, grounds the
+    # assistant in that document's draft in addition to dossier-wide context.
+    section_path: str | None = None
+    stem: str | None = None
 
 
 class ChatResponse(BaseModel):

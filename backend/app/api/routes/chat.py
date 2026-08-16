@@ -14,6 +14,14 @@ from fastapi import APIRouter, HTTPException
 
 from app.core.config import settings
 from app.models.schemas import ChatRequest, ChatResponse
+from app.services.dossier_service import (
+    context_block,
+    list_generated_docs,
+    read_generated,
+    read_meta,
+    _resolve_section_dir,
+    _safe_filename,
+)
 from app.services.llm import deepseek_chat
 
 logger = logging.getLogger(__name__)
@@ -27,6 +35,53 @@ _HEADERS = {"ngrok-skip-browser-warning": "true"}
 _CLOUD = "cloud"  # internal alias for DeepSeek
 
 
+def _dossier_system_prompt(section_path: str | None, stem: str | None) -> str | None:
+    """Ground the assistant in the dossier: product context, what's been filed,
+    and (if chat was opened from a document) that document's current draft.
+    No vector store — the whole dossier is a few hundred KB of markdown.
+    ponytail: full-text injection; move to embeddings if a real dossier
+    overflows the context window.
+    """
+    parts = [context_block("PRODUCT CONTEXT:")]
+
+    docs = list_generated_docs()
+    if docs:
+        lines = [f"- {d['ctd_path']} {d['title']} [{d['status']}]" for d in docs[:60]]
+        parts.append("FILED CTD SECTIONS:\n" + "\n".join(lines))
+
+    if section_path and stem:
+        try:
+            section_dir = _resolve_section_dir(section_path)
+            safe_stem = _safe_filename(stem)
+            meta = read_meta(section_dir, safe_stem)
+            markdown = read_generated(section_dir, safe_stem)
+            if meta and markdown:
+                parts.append(
+                    f"USER IS CURRENTLY VIEWING: {meta.get('section_path', '')} "
+                    f"{meta.get('title', '')}\nCurrent draft:\n---\n{markdown[:4000]}\n---"
+                )
+        except ValueError:
+            pass  # bad path from the client; fall back to dossier-wide context only
+
+    parts = [p for p in parts if p]
+    if not parts:
+        return None
+    return (
+        "You are Aicyclinder, an assistant embedded in a CTD regulatory dossier "
+        "tool. Use the following dossier state to answer questions; do not "
+        "invent product, quality, safety, or efficacy facts beyond it.\n\n"
+        + "\n\n".join(parts)
+    )
+
+
+def _with_system_prompt(req: ChatRequest) -> list[dict]:
+    messages = [m.model_dump() for m in req.messages]
+    system_prompt = _dossier_system_prompt(req.section_path, req.stem)
+    if system_prompt:
+        messages = [{"role": "system", "content": system_prompt}] + messages
+    return messages
+
+
 @router.post("", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     if req.provider == _CLOUD:
@@ -37,7 +92,7 @@ async def chat(req: ChatRequest):
 async def _chat_aicyclinder(req: ChatRequest) -> ChatResponse:
     url = f"{settings.AICYCLINDER_API_URL.rstrip('/')}/generate"
     payload = {
-        "messages": [m.model_dump() for m in req.messages],
+        "messages": _with_system_prompt(req),
         "max_new_tokens": req.max_new_tokens,
         "temperature": req.temperature,
     }
@@ -62,7 +117,7 @@ async def _chat_aicyclinder(req: ChatRequest) -> ChatResponse:
 async def _chat_cloud(req: ChatRequest) -> ChatResponse:
     try:
         text = await deepseek_chat(
-            [m.model_dump() for m in req.messages],
+            _with_system_prompt(req),
             max_tokens=req.max_new_tokens,
             temperature=req.temperature,
         )
