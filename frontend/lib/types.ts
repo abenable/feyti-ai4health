@@ -3,6 +3,15 @@
 
 export type ReviewStatusValue = "draft" | "edited" | "approved";
 
+export interface DossierSummary {
+  id: string;
+  name: string;
+  product_name: string;
+  created_at: string;
+  filed: number;
+  approved: number;
+}
+
 export interface ProductContext {
   product_name: string;
   active_ingredient: string;

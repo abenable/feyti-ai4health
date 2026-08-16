@@ -8,10 +8,12 @@ Two providers, both surfaced as "Aicyclinder" to the user:
 """
 
 import logging
+from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.api.deps import require_dossier_root
 from app.core.config import settings
 from app.models.schemas import ChatRequest, ChatResponse
 from app.services.dossier_service import (
@@ -35,23 +37,23 @@ _HEADERS = {"ngrok-skip-browser-warning": "true"}
 _CLOUD = "cloud"  # internal alias for DeepSeek
 
 
-def _dossier_system_prompt(section_path: str | None, stem: str | None) -> str | None:
+def _dossier_system_prompt(root: Path, section_path: str | None, stem: str | None) -> str | None:
     """Ground the assistant in the dossier: product context, what's been filed,
     and (if chat was opened from a document) that document's current draft.
-    No vector store — the whole dossier is a few hundred KB of markdown.
+    No vector store — one dossier is a few hundred KB of markdown.
     ponytail: full-text injection; move to embeddings if a real dossier
     overflows the context window.
     """
-    parts = [context_block("PRODUCT CONTEXT:")]
+    parts = [context_block(root, "PRODUCT CONTEXT:")]
 
-    docs = list_generated_docs()
+    docs = list_generated_docs(root)
     if docs:
         lines = [f"- {d['ctd_path']} {d['title']} [{d['status']}]" for d in docs[:60]]
         parts.append("FILED CTD SECTIONS:\n" + "\n".join(lines))
 
     if section_path and stem:
         try:
-            section_dir = _resolve_section_dir(section_path)
+            section_dir = _resolve_section_dir(root, section_path)
             safe_stem = _safe_filename(stem)
             meta = read_meta(section_dir, safe_stem)
             markdown = read_generated(section_dir, safe_stem)
@@ -74,25 +76,25 @@ def _dossier_system_prompt(section_path: str | None, stem: str | None) -> str | 
     )
 
 
-def _with_system_prompt(req: ChatRequest) -> list[dict]:
+def _with_system_prompt(req: ChatRequest, root: Path) -> list[dict]:
     messages = [m.model_dump() for m in req.messages]
-    system_prompt = _dossier_system_prompt(req.section_path, req.stem)
+    system_prompt = _dossier_system_prompt(root, req.section_path, req.stem)
     if system_prompt:
         messages = [{"role": "system", "content": system_prompt}] + messages
     return messages
 
 
 @router.post("", response_model=ChatResponse)
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, root: Path = Depends(require_dossier_root)):
     if req.provider == _CLOUD:
-        return await _chat_cloud(req)
-    return await _chat_aicyclinder(req)
+        return await _chat_cloud(req, root)
+    return await _chat_aicyclinder(req, root)
 
 
-async def _chat_aicyclinder(req: ChatRequest) -> ChatResponse:
+async def _chat_aicyclinder(req: ChatRequest, root: Path) -> ChatResponse:
     url = f"{settings.AICYCLINDER_API_URL.rstrip('/')}/generate"
     payload = {
-        "messages": _with_system_prompt(req),
+        "messages": _with_system_prompt(req, root),
         "max_new_tokens": req.max_new_tokens,
         "temperature": req.temperature,
     }
@@ -114,10 +116,10 @@ async def _chat_aicyclinder(req: ChatRequest) -> ChatResponse:
     return ChatResponse(response=data.get("response", ""))
 
 
-async def _chat_cloud(req: ChatRequest) -> ChatResponse:
+async def _chat_cloud(req: ChatRequest, root: Path) -> ChatResponse:
     try:
         text = await deepseek_chat(
-            _with_system_prompt(req),
+            _with_system_prompt(req, root),
             max_tokens=req.max_new_tokens,
             temperature=req.temperature,
         )
@@ -131,8 +133,10 @@ async def _chat_cloud(req: ChatRequest) -> ChatResponse:
 
 
 @router.get("/health")
-async def chat_health(provider: str = "aicyclinder"):
-    """Report whether the selected backend is reachable (for the UI status badge)."""
+async def chat_health(dossier_id: str, provider: str = "aicyclinder"):
+    """Report whether the selected backend is reachable (for the UI status badge).
+    Provider health doesn't depend on dossier content; dossier_id is only here
+    because it's part of this route's URL prefix."""
     if provider == _CLOUD:
         if settings.DEEPSEEK_API_KEY:
             return {"status": "ok"}

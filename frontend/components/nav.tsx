@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { FolderTree, LayoutDashboard, MessageSquare, Wifi, WifiOff } from "lucide-react";
+import { useParams, usePathname } from "next/navigation";
+import { ArrowLeftRight, FolderTree, LayoutDashboard, MessageSquare, Wifi, WifiOff } from "lucide-react";
 
-import { getApiUrl } from "@/lib/api";
+import { apiFetch, getApiUrl } from "@/lib/api";
+import type { DossierSummary } from "@/lib/types";
 import {
   Tooltip,
   TooltipContent,
@@ -13,15 +14,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-const LINKS = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dossier", label: "Dossier", icon: FolderTree },
-  { href: "/chat", label: "Chat", icon: MessageSquare },
-];
-
 export function Nav() {
   const pathname = usePathname();
+  const { dossierId } = useParams<{ dossierId?: string }>();
   const [isBackendOnline, setIsBackendOnline] = useState<boolean | null>(null);
+  const [dossierName, setDossierName] = useState<string | null>(null);
 
   useEffect(() => {
     const checkHealth = async () => {
@@ -41,17 +38,45 @@ export function Nav() {
     return () => clearInterval(intervalId);
   }, []);
 
+  useEffect(() => {
+    if (!dossierId) {
+      setDossierName(null);
+      return;
+    }
+    apiFetch<DossierSummary>(`/api/v1/dossiers/${dossierId}`)
+      .then((d) => setDossierName(d.name))
+      .catch(() => setDossierName(null));
+  }, [dossierId]);
+
+  const links = dossierId
+    ? [
+        { href: `/d/${dossierId}`, label: "Dashboard", icon: LayoutDashboard },
+        { href: `/d/${dossierId}/structure`, label: "Structure", icon: FolderTree },
+        { href: `/d/${dossierId}/chat`, label: "Chat", icon: MessageSquare },
+      ]
+    : [];
+
   return (
     <TooltipProvider delay={200}>
       <nav className="sticky top-0 z-40 w-full border-b border-slate-200/60 bg-[#fdfbf7]/90 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
-          <Link href="/" className="font-serif text-lg font-bold text-slate-900 tracking-tight shrink-0">
-            Feyti
-          </Link>
+          <div className="flex items-center gap-3 min-w-0">
+            <Link href="/" className="font-serif text-lg font-bold text-slate-900 tracking-tight shrink-0">
+              Feyti
+            </Link>
+            {dossierName && (
+              <>
+                <span className="text-slate-300 hidden sm:inline">/</span>
+                <span className="text-sm text-slate-600 truncate hidden sm:inline">{dossierName}</span>
+              </>
+            )}
+          </div>
 
           <div className="flex items-center gap-1">
-            {LINKS.map(({ href, label, icon: Icon }) => {
-              const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+            {links.map(({ href, label, icon: Icon }) => {
+              // The dashboard link (bare /d/{id}) must match exactly, or it would
+              // also light up on /d/{id}/structure and /d/{id}/chat.
+              const active = href === `/d/${dossierId}` ? pathname === href : pathname.startsWith(href);
               return (
                 <Link
                   key={href}
@@ -67,6 +92,15 @@ export function Nav() {
                 </Link>
               );
             })}
+            {dossierId && (
+              <Link
+                href="/"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+              >
+                <ArrowLeftRight className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Switch</span>
+              </Link>
+            )}
           </div>
 
           {isBackendOnline !== null && (

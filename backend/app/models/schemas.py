@@ -1,6 +1,19 @@
 from pydantic import BaseModel
 
 
+class DossierSummary(BaseModel):
+    id: str
+    name: str
+    product_name: str = ""
+    created_at: str
+    filed: int  # documents filed
+    approved: int
+
+
+class CreateDossierRequest(BaseModel):
+    name: str
+
+
 class Classification(BaseModel):
     section_path: str
     title: str

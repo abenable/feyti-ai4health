@@ -15,6 +15,7 @@ read ~11% forever and be meaningless. Empty sections are reported as coverage;
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from app.services import llm
 from app.services.dossier_service import (
@@ -58,13 +59,13 @@ def _tally(plan: list[dict]) -> tuple[dict, list[dict], list[dict], list[dict]]:
     return totals, modules, empties, drafted
 
 
-def _count_gaps(docs: list[dict]) -> tuple[int, list[dict]]:
+def _count_gaps(root: Path, docs: list[dict]) -> tuple[int, list[dict]]:
     """Total ⚠️ TO BE PROVIDED markers across drafts + which docs carry them."""
     total = 0
     per_doc: list[dict] = []
     # ponytail: reads every drafted doc; fine for a demo, memoize by mtime if it bites.
     for d in docs:
-        md = read_generated(_resolve_section_dir(d["section_path"]), d["stem"])
+        md = read_generated(_resolve_section_dir(root, d["section_path"]), d["stem"])
         n = md.count(GAP_MARKER)
         if n:
             per_doc.append({"path": d["ctd_path"], "title": d["title"], "gaps": n})
@@ -86,8 +87,8 @@ def _verdict(score: int, in_review: int, open_gaps: int) -> str:
     return "not_ready"
 
 
-def _build_prompt(totals, modules, empties, drafted, gap_docs) -> str:
-    ctx = context_block("PRODUCT CONTEXT:")
+def _build_prompt(root: Path, totals, modules, empties, drafted, gap_docs) -> str:
+    ctx = context_block(root, "PRODUCT CONTEXT:")
     mod_lines = "\n".join(
         f"- {m['module']}: {m['approved']} approved, {m['in_review']} in review, {m['empty']} empty"
         for m in modules
@@ -119,10 +120,10 @@ def _build_prompt(totals, modules, empties, drafted, gap_docs) -> str:
     ]))
 
 
-async def analyze_readiness() -> dict:
-    docs = list_generated_docs()  # walk once; share with build_plan + gap scan
-    totals, modules, empties, drafted = _tally(build_plan(docs))
-    open_gaps, gap_docs = _count_gaps(docs)
+async def analyze_readiness(root: Path) -> dict:
+    docs = list_generated_docs(root)  # walk once; share with build_plan + gap scan
+    totals, modules, empties, drafted = _tally(build_plan(root, docs))
+    open_gaps, gap_docs = _count_gaps(root, docs)
     score = round(100 * totals["approved"] / max(totals["engaged"], 1))
     verdict = _verdict(score, totals["in_review"], open_gaps)
 
@@ -134,7 +135,7 @@ async def analyze_readiness() -> dict:
         # the whole report, so fall back to a note and still return the numbers.
         try:
             narrative = await llm.generate_text(
-                _build_prompt(totals, modules, empties, drafted, gap_docs)
+                _build_prompt(root, totals, modules, empties, drafted, gap_docs)
             )
         except Exception:
             logger.warning("readiness narrative generation failed", exc_info=True)
@@ -154,6 +155,7 @@ if __name__ == "__main__":  # self-check: python -m app.services.readiness_servi
     assert round(100 * 0 / max(0, 1)) == 0
     # prompt carries the empty list + gap tally so the AI can prioritise
     p = _build_prompt(
+        Path("/nonexistent"),
         {"engaged": 2, "approved": 1, "in_review": 1, "empty": 1, "catalogue": 3},
         [{"module": "Module 3 — Quality", "approved": 1, "in_review": 1, "empty": 1, "drafted": 2}],
         [{"path": "3.2.P.8", "title": "Stability"}],

@@ -49,10 +49,15 @@ export async function downloadFromApi(path: string, filename: string) {
   downloadBlob(await res.blob(), filename);
 }
 
-/** Build a /dossier/[...path] link for a document: encode each folder segment. */
-export function workspaceHref(sectionPath: string, stem: string) {
+/** Build a dossier-scoped API path: /api/v1/dossiers/{dossierId}/... */
+export function dossierApi(dossierId: string, path: string) {
+  return `/api/v1/dossiers/${encodeURIComponent(dossierId)}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+/** Build a /d/[dossierId]/structure/[...path] link for a document. */
+export function workspaceHref(dossierId: string, sectionPath: string, stem: string) {
   const encoded = sectionPath.split("/").map(encodeURIComponent).join("/");
-  return `/dossier/${encoded}?stem=${encodeURIComponent(stem)}`;
+  return `/d/${encodeURIComponent(dossierId)}/structure/${encoded}?stem=${encodeURIComponent(stem)}`;
 }
 
 /** Reverse of workspaceHref's path part: catch-all route segments → section_path. */

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 
 from app.core.exceptions import DocumentAnalysisError
 from app.services.dossier_service import context_block
@@ -48,11 +49,11 @@ def _fields_for(section_path: str) -> list[str]:
     return best_fields
 
 
-def _build_prompt(text: str, classification: dict) -> str:
+def _build_prompt(text: str, classification: dict, root: Path) -> str:
     section_path = classification.get("section_path", "")
     title = classification.get("title", "")
     fields = _fields_for(section_path)
-    product = context_block("PRODUCT CONTEXT:")
+    product = context_block(root, "PRODUCT CONTEXT:")
 
     return (
         "You are a regulatory document analyst extracting structured facts from "
@@ -74,12 +75,12 @@ def _build_prompt(text: str, classification: dict) -> str:
     )
 
 
-async def extract_fields(text: str, classification: dict) -> list[dict]:
+async def extract_fields(text: str, classification: dict, root: Path) -> list[dict]:
     """Return [{label, value, page, confidence}] for the section's field set."""
     if not text.strip():
         return []
 
-    prompt = _build_prompt(text, classification)
+    prompt = _build_prompt(text, classification, root)
     try:
         raw = await generate_json(prompt)
         data = json.loads(raw)
@@ -116,7 +117,8 @@ if __name__ == "__main__":  # ponytail self-check: python -m app.services.extrac
     assert _fields_for("9.9.9") == _DEFAULT_FIELDS
 
     prompt = _build_prompt("Batch AB123 stored at 25C for 6 months.",
-                            {"section_path": "3.2.P.8.3", "title": "Stability Data"})
+                            {"section_path": "3.2.P.8.3", "title": "Stability Data"},
+                            Path("/nonexistent"))
     assert "never guess or infer" in prompt
     assert "batch numbers" in prompt
     print("OK — extraction_service field routing + no-inference prompt guardrail")

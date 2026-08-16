@@ -1,19 +1,23 @@
-"""Filesystem-backed dossier placement and tree listing."""
+"""Filesystem-backed dossier placement and tree listing.
+
+Multiple dossiers live side by side under DOSSIERS_ROOT, one directory per
+dossier (its `dossier_id`). Every function below that reads or writes dossier
+content takes that dossier's resolved root Path explicitly — there is no
+process-wide "current dossier" global, so concurrent requests for different
+dossiers never interfere with each other.
+"""
 
 from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
 from app.core.config import settings
 
-_ROOT = Path(settings.DOSSIER_ROOT)
-
-# Dossier-wide product context (one product per dossier), captured before upload
-# and used to ground classification + generation prompts.
-_CONTEXT_PATH = _ROOT / ".context.json"
+_DOSSIERS_ROOT = Path(settings.DOSSIERS_ROOT)
 
 # Review states for generated CTD documents.
 STATUS_DRAFT = "draft"
@@ -43,8 +47,104 @@ def _safe_path_part(text: str) -> str:
     return text
 
 
-def _resolve_section_dir(path_param: str) -> Path:
-    """Convert a slash-separated dossier path into a verified Path under _ROOT.
+def slugify(name: str) -> str:
+    """Turn a display name into a URL/filesystem-safe id."""
+    slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+    return slug or "dossier"
+
+
+def dossier_root(dossier_id: str) -> Path:
+    """Resolve a dossier_id to its root Path (does not check existence)."""
+    safe_id = _safe_path_part(dossier_id)
+    return _DOSSIERS_ROOT / safe_id
+
+
+def _dossier_meta_path(root: Path) -> Path:
+    return root / ".dossier.json"
+
+
+def _context_path(root: Path) -> Path:
+    return root / ".context.json"
+
+
+def _migrate_legacy_dossier() -> None:
+    """One-time move of the pre-multi-dossier layout (./dossier) into
+    DOSSIERS_ROOT/default, so upgrading never loses already-filed work."""
+    if _DOSSIERS_ROOT.exists():
+        return
+    legacy = Path(settings.LEGACY_DOSSIER_ROOT)
+    if not legacy.exists() or not any(legacy.iterdir()):
+        return
+    _DOSSIERS_ROOT.mkdir(parents=True, exist_ok=True)
+    new_root = _DOSSIERS_ROOT / "default"
+    legacy.rename(new_root)
+    name = read_context(new_root).get("product_name") or "Untitled Dossier"
+    _dossier_meta_path(new_root).write_text(json.dumps({
+        "id": "default", "name": name, "created_at": _now_iso(),
+    }, indent=2))
+
+
+def dossier_summary(root: Path) -> dict:
+    """Lightweight card data for the dossier picker: id, name, product, counts."""
+    meta = {}
+    meta_path = _dossier_meta_path(root)
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            meta = {}
+    docs = list_generated_docs(root)
+    approved = sum(1 for d in docs if d["status"] == STATUS_APPROVED)
+    return {
+        "id": meta.get("id", root.name),
+        "name": meta.get("name") or root.name,
+        "product_name": read_context(root).get("product_name", ""),
+        "created_at": meta.get("created_at", ""),
+        "filed": len(docs),
+        "approved": approved,
+    }
+
+
+def list_dossiers() -> list[dict]:
+    """Every dossier under DOSSIERS_ROOT, newest first."""
+    _migrate_legacy_dossier()
+    if not _DOSSIERS_ROOT.exists():
+        return []
+    summaries = [
+        dossier_summary(d) for d in sorted(_DOSSIERS_ROOT.iterdir())
+        if d.is_dir() and _dossier_meta_path(d).exists()
+    ]
+    return sorted(summaries, key=lambda s: s["created_at"], reverse=True)
+
+
+def get_dossier(dossier_id: str) -> dict | None:
+    """Return the dossier's summary, or None if it doesn't exist."""
+    root = dossier_root(dossier_id)
+    if not _dossier_meta_path(root).exists():
+        return None
+    return dossier_summary(root)
+
+
+def create_dossier(name: str) -> dict:
+    """Create a new, empty dossier and return its summary."""
+    name = name.strip() or "Untitled Dossier"
+    base_slug = slugify(name)
+    slug = base_slug
+    n = 2
+    while (_DOSSIERS_ROOT / slug).exists():
+        slug = f"{base_slug}-{n}"
+        n += 1
+
+    root = _DOSSIERS_ROOT / slug
+    root.mkdir(parents=True)
+    _dossier_meta_path(root).write_text(json.dumps({
+        "id": slug, "name": name, "created_at": _now_iso(),
+    }, indent=2))
+    return dossier_summary(root)
+
+
+def _resolve_section_dir(root: Path, path_param: str) -> Path:
+    """Convert a slash-separated dossier path into a verified Path under root.
 
     path_param format: '<module>/<section folder>', e.g.
     'Module 3 — Quality/3.2.P.8.1 Stability Summary and Conclusion (Drug Product)'.
@@ -56,9 +156,9 @@ def _resolve_section_dir(path_param: str) -> Path:
         raise ValueError(f"section_path must be module/section: {path_param!r}")
     module_part = _safe_path_part(parts[0])
     section_part = _safe_path_part(parts[1])
-    section_dir = (_ROOT / module_part / section_part).resolve()
-    root = _ROOT.resolve()
-    if root not in section_dir.parents and section_dir != root:
+    section_dir = (root / module_part / section_part).resolve()
+    resolved_root = root.resolve()
+    if resolved_root not in section_dir.parents and section_dir != resolved_root:
         raise ValueError(f"Resolved path escapes dossier root: {section_dir}")
     if not section_dir.is_dir():
         raise ValueError(f"Section folder not found: {path_param}")
@@ -77,13 +177,13 @@ def _meta_path(section_dir: Path, stem: str) -> Path:
     return section_dir / f"{_safe_filename(stem)}.meta.json"
 
 
-def resolve_document_paths(path_param: str, stem: str) -> dict:
-    """Resolve section_path + stem to verified file paths under DOSSIER_ROOT.
+def resolve_document_paths(root: Path, path_param: str, stem: str) -> dict:
+    """Resolve section_path + stem to verified file paths under a dossier root.
 
     Returns {"section_dir": Path, "generated": Path, "status": Path, "meta": Path}.
     Raises ValueError for traversal attempts or paths outside the dossier.
     """
-    section_dir = _resolve_section_dir(path_param)
+    section_dir = _resolve_section_dir(root, path_param)
     safe_stem = _safe_filename(stem)
     return {
         "section_dir": section_dir,
@@ -173,17 +273,17 @@ def load_extracted_text(section_dir: Path, meta: dict) -> str:
     return ""
 
 
-def list_generated_docs() -> list[dict]:
-    """Return every generated document + status across the dossier."""
+def list_generated_docs(root: Path) -> list[dict]:
+    """Return every generated document + status across one dossier."""
     docs: list[dict] = []
-    if not _ROOT.exists():
+    if not root.exists():
         return docs
-    for generated in sorted(_ROOT.rglob("*.generated.md")):
+    for generated in sorted(root.rglob("*.generated.md")):
         section_dir = generated.parent
         stem = generated.stem.replace(".generated", "")
         status = _read_status(section_dir, stem)
         meta = read_meta(section_dir, stem)
-        rel = section_dir.relative_to(_ROOT)
+        rel = section_dir.relative_to(root)
         docs.append(
             {
                 "section_path": str(rel),
@@ -202,7 +302,7 @@ def list_generated_docs() -> list[dict]:
     return docs
 
 
-def build_plan(docs: list[dict] | None = None) -> list[dict]:
+def build_plan(root: Path, docs: list[dict] | None = None) -> list[dict]:
     """Merge the full CTD catalogue with filed documents into a completion map.
 
     Every CTD section is returned (even with no document), grouped by module,
@@ -217,7 +317,7 @@ def build_plan(docs: list[dict] | None = None) -> list[dict]:
     from app.services.ctd_map import CTD_MAP, MODULE_NAMES
 
     if docs is None:
-        docs = list_generated_docs()
+        docs = list_generated_docs(root)
     docs_by_path: dict[str, list] = defaultdict(list)
     for d in docs:
         docs_by_path[d["ctd_path"]].append(d)
@@ -225,69 +325,73 @@ def build_plan(docs: list[dict] | None = None) -> list[dict]:
     modules: dict[str, list] = {}
     for path, title in CTD_MAP.items():
         module = MODULE_NAMES.get(path.split(".")[0], "Other")
-        docs = docs_by_path.get(path, [])
-        if not docs:
+        path_docs = docs_by_path.get(path, [])
+        if not path_docs:
             status = "empty"
-        elif all(x["status"] == "approved" for x in docs):
+        elif all(x["status"] == "approved" for x in path_docs):
             status = "approved"
         else:
             status = "in_review"
         modules.setdefault(module, []).append(
-            {"path": path, "title": title, "status": status, "documents": docs}
+            {"path": path, "title": title, "status": status, "documents": path_docs}
         )
     return [{"module": m, "sections": secs} for m, secs in modules.items()]
 
 
-_context_cache: tuple[float, dict] | None = None  # (mtime, value); invalidated on write
+# Per-dossier product context cache, keyed by resolved root path string.
+# (mtime, value); invalidated per-dossier when its context file changes.
+_context_cache: dict[str, tuple[float, dict]] = {}
 
 
-def read_context() -> dict:
-    """Return the dossier's product context as {str: str}, or {} if none saved.
+def read_context(root: Path) -> dict:
+    """Return a dossier's product context as {str: str}, or {} if none saved.
 
     Values are coerced to strings so a hand-edited/corrupt file can never break
     ProductContext validation or prompt formatting downstream. Memoized by file
     mtime so classify()/generate() don't re-read the file on every call.
     """
-    global _context_cache
-    if not _CONTEXT_PATH.exists():
-        _context_cache = None
+    context_path = _context_path(root)
+    key = str(root)
+    if not context_path.exists():
+        _context_cache.pop(key, None)
         return {}
-    mtime = _CONTEXT_PATH.stat().st_mtime
-    if _context_cache and _context_cache[0] == mtime:
-        return _context_cache[1]
+    mtime = context_path.stat().st_mtime
+    cached = _context_cache.get(key)
+    if cached and cached[0] == mtime:
+        return cached[1]
     try:
-        data = json.loads(_CONTEXT_PATH.read_text())
+        data = json.loads(context_path.read_text())
     except (json.JSONDecodeError, OSError):
         return {}
     if not isinstance(data, dict):
         return {}
     value = {str(k): "" if v is None else str(v) for k, v in data.items()}
-    _context_cache = (mtime, value)
+    _context_cache[key] = (mtime, value)
     return value
 
 
-def write_context(data: dict) -> None:
-    """Persist the dossier's product context."""
-    _ROOT.mkdir(parents=True, exist_ok=True)
-    _CONTEXT_PATH.write_text(json.dumps(data, indent=2))
+def write_context(root: Path, data: dict) -> None:
+    """Persist a dossier's product context."""
+    root.mkdir(parents=True, exist_ok=True)
+    _context_path(root).write_text(json.dumps(data, indent=2))
 
 
-def context_block(header: str) -> str:
-    """Format the saved product context as a prompt block, or '' if empty."""
-    filled = {k: v for k, v in read_context().items() if isinstance(v, str) and v.strip()}
+def context_block(root: Path, header: str) -> str:
+    """Format a dossier's saved product context as a prompt block, or '' if empty."""
+    filled = {k: v for k, v in read_context(root).items() if isinstance(v, str) and v.strip()}
     if not filled:
         return ""
     lines = [f"- {k.replace('_', ' ').title()}: {v.strip()}" for k, v in filled.items()]
     return header + "\n" + "\n".join(lines)
 
 
-def create_section_document(ctd_path: str, title: str, module: str, stem: str = "section") -> dict:
+def create_section_document(root: Path, ctd_path: str, title: str, module: str, stem: str = "section") -> dict:
     """Create (idempotently) an authored-document scaffold for a CTD section
     that has no uploaded source, so it can be edited/generated/approved like any
     filed document. Returns {section_dir, stem, section_path (folder rel)}.
     """
     safe_stem = _safe_filename(stem)
-    module_dir = _ROOT / _safe_dir_name(module)
+    module_dir = root / _safe_dir_name(module)
     section_dir = module_dir / _safe_dir_name(f"{ctd_path} {title}")
     section_dir.mkdir(parents=True, exist_ok=True)
     (module_dir / ".module.json").write_text(json.dumps({"module": module}))
@@ -314,11 +418,11 @@ def create_section_document(ctd_path: str, title: str, module: str, stem: str = 
     return {
         "section_dir": section_dir,
         "stem": safe_stem,
-        "section_path": str(section_dir.relative_to(_ROOT)),
+        "section_path": str(section_dir.relative_to(root)),
     }
 
 
-def reclassify_document(section_dir: Path, stem: str, ctd_path: str, title: str, module: str) -> dict:
+def reclassify_document(root: Path, section_dir: Path, stem: str, ctd_path: str, title: str, module: str) -> dict:
     """Move a filed document (source file + meta/status/generated sidecars)
     into a new CTD section folder, rewriting its classification in meta.
     Returns {section_path, stem} — the new folder path and stem.
@@ -328,7 +432,7 @@ def reclassify_document(section_dir: Path, stem: str, ctd_path: str, title: str,
         raise FileNotFoundError(f"No document found at {section_dir}/{stem}")
     meta = json.loads(meta_path.read_text())
 
-    new_module_dir = _ROOT / _safe_dir_name(module)
+    new_module_dir = root / _safe_dir_name(module)
     new_section_dir = new_module_dir / _safe_dir_name(f"{ctd_path} {title}")
     new_section_dir.mkdir(parents=True, exist_ok=True)
     (new_module_dir / ".module.json").write_text(json.dumps({"module": module}))
@@ -348,13 +452,13 @@ def reclassify_document(section_dir: Path, stem: str, ctd_path: str, title: str,
             src_file.rename(new_section_dir / original)
 
     return {
-        "section_path": str(new_section_dir.relative_to(_ROOT)),
+        "section_path": str(new_section_dir.relative_to(root)),
         "stem": stem,
     }
 
 
-def file_into_dossier(file_bytes, filename, classification, extracted_text, chunks: list[dict] | None = None) -> dict:
-    """Write file and metadata under DOSSIER_ROOT/<module>/<section>."""
+def file_into_dossier(root: Path, file_bytes, filename, classification, extracted_text, chunks: list[dict] | None = None) -> dict:
+    """Write file and metadata under root/<module>/<section>."""
     name = _safe_filename(filename)
     stem = Path(name).stem
 
@@ -362,7 +466,7 @@ def file_into_dossier(file_bytes, filename, classification, extracted_text, chun
     section_path = classification["section_path"]
     title = classification["title"]
 
-    module_dir = _ROOT / _safe_dir_name(module)
+    module_dir = root / _safe_dir_name(module)
     section_dir = module_dir / _safe_dir_name(f"{section_path} {title}")
     section_dir.mkdir(parents=True, exist_ok=True)
 
@@ -400,19 +504,19 @@ def file_into_dossier(file_bytes, filename, classification, extracted_text, chun
         "section_path": section_path,
         # Folder-relative path (sanitized dir names) — what the API's
         # section_path query param and the frontend route actually need.
-        "folder_path": str(section_dir.relative_to(_ROOT)),
+        "folder_path": str(section_dir.relative_to(root)),
         "section_dir": section_dir,
         "stem": stem,
     }
 
 
-def tree() -> list[dict]:
-    """Walk DOSSIER_ROOT and return a nested module/section/document tree."""
+def tree(root: Path) -> list[dict]:
+    """Walk a dossier root and return a nested module/section/document tree."""
     modules: list[dict] = []
-    if not _ROOT.exists():
+    if not root.exists():
         return modules
 
-    for module_path in sorted(_ROOT.iterdir()):
+    for module_path in sorted(root.iterdir()):
         if not module_path.is_dir():
             continue
         sections: list[dict] = []
@@ -463,3 +567,38 @@ def tree() -> list[dict]:
             modules.append({"module": module_name, "sections": sections})
 
     return modules
+
+
+if __name__ == "__main__":  # self-check: python -m app.services.dossier_service
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        _DOSSIERS_ROOT = Path(tmp)  # module-level rebind for this check only
+
+        a = create_dossier("Povidone Tablet NDA")
+        b = create_dossier("Povidone Tablet NDA")  # duplicate name → deduped id
+        assert a["id"] == "povidone-tablet-nda"
+        assert b["id"] == "povidone-tablet-nda-2"
+        assert a["filed"] == 0 and a["approved"] == 0
+
+        ids = {d["id"] for d in list_dossiers()}
+        assert ids == {a["id"], b["id"]}
+
+        root_a = dossier_root(a["id"])
+        classification = {
+            "section_path": "3.2.P.8.1",
+            "title": "Stability Summary and Conclusion (Drug Product)",
+            "module": "Module 3 — Quality",
+            "confidence": 0.85,
+        }
+        file_into_dossier(root_a, b"payload", "stability.pdf", classification, "extracted text")
+        docs_a = list_generated_docs(root_a)
+        assert docs_a == []  # filed, but no .generated.md written yet — that's fine, tree() covers filed-only
+        t = tree(root_a)
+        assert t[0]["sections"][0]["documents"][0]["name"] == "stability.pdf"
+
+        # Dossier B must not see dossier A's document — isolation is the whole point.
+        root_b = dossier_root(b["id"])
+        assert tree(root_b) == []
+
+        print("OK — multi-dossier isolation, id dedup, and filing verified")

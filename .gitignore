@@ -9,6 +9,7 @@ out/
 build/
 dist/
 /backend/dossier/
+/backend/dossiers/
 
 # Environment files
 .env

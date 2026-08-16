@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, Suspense, KeyboardEvent } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Send,
@@ -18,7 +18,7 @@ import {
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 
-import { apiJson, getApiUrl } from "@/lib/api";
+import { apiJson, dossierApi, getApiUrl, workspaceHref } from "@/lib/api";
 import type { ChatMessage } from "@/lib/types";
 
 const SUGGESTIONS = [
@@ -31,6 +31,7 @@ const SUGGESTIONS = [
 type Mode = "aicyclinder" | "cloud";
 
 function ChatPageInner() {
+  const { dossierId } = useParams<{ dossierId: string }>();
   const searchParams = useSearchParams();
   const sectionPath = searchParams.get("section_path") ?? undefined;
   const stem = searchParams.get("stem") ?? undefined;
@@ -48,7 +49,7 @@ function ChatPageInner() {
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        const res = await fetch(getApiUrl(`/api/v1/chat/health?provider=${mode}`), { cache: "no-store" });
+        const res = await fetch(getApiUrl(dossierApi(dossierId, `/chat/health?provider=${mode}`)), { cache: "no-store" });
         setIsModelOnline(res.ok);
       } catch {
         setIsModelOnline(false);
@@ -58,7 +59,7 @@ function ChatPageInner() {
     checkHealth();
     const id = setInterval(checkHealth, 30000);
     return () => clearInterval(id);
-  }, [mode]);
+  }, [dossierId, mode]);
 
   // Auto-scroll to the newest message.
   useEffect(() => {
@@ -76,7 +77,7 @@ function ChatPageInner() {
       setIsSending(true);
 
       try {
-        const data = await apiJson("/api/v1/chat", "POST", {
+        const data = await apiJson(dossierApi(dossierId, "/chat"), "POST", {
           messages: nextMessages,
           max_new_tokens: 512,
           temperature: 0.0,
@@ -95,7 +96,7 @@ function ChatPageInner() {
         textareaRef.current?.focus();
       }
     },
-    [messages, isSending, mode, sectionPath, stem],
+    [dossierId, messages, isSending, mode, sectionPath, stem],
   );
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -105,7 +106,7 @@ function ChatPageInner() {
     }
   };
 
-  const backLink = grounded ? `/dossier/${sectionPath}?stem=${encodeURIComponent(stem!)}` : "/dossier";
+  const backLink = grounded ? workspaceHref(dossierId, sectionPath!, stem!) : `/d/${dossierId}/structure`;
 
   return (
     <div className="min-h-screen bg-slate-50/50 text-slate-900 flex flex-col relative overflow-hidden">

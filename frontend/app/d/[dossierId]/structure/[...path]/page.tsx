@@ -28,7 +28,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { apiFetch, apiJson, downloadFromApi, sectionPathFromSegments, workspaceHref } from "@/lib/api";
+import { apiFetch, apiJson, dossierApi, downloadFromApi, sectionPathFromSegments, workspaceHref } from "@/lib/api";
 import type {
   DocumentDetail,
   ExtractedField,
@@ -61,10 +61,11 @@ function statusClasses(status: string) {
 }
 
 function DocumentWorkspacePageInner() {
-  const params = useParams<{ path: string[] }>();
+  const params = useParams<{ dossierId: string; path: string[] }>();
   const searchParams = useSearchParams();
   const router = useRouter();
 
+  const dossierId = params.dossierId;
   const sectionPath = useMemo(() => sectionPathFromSegments(params.path ?? []), [params.path]);
   const stem = searchParams.get("stem") ?? "";
 
@@ -97,7 +98,7 @@ function DocumentWorkspacePageInner() {
     setLoading(true);
     try {
       const data = await apiFetch<DocumentDetail>(
-        `/api/v1/dossier/document?section_path=${encodeURIComponent(sectionPath)}&stem=${encodeURIComponent(stem)}`,
+        dossierApi(dossierId, `/document?section_path=${encodeURIComponent(sectionPath)}&stem=${encodeURIComponent(stem)}`),
       );
       setDetail(data);
       setEditMarkdown(data.markdown);
@@ -108,7 +109,7 @@ function DocumentWorkspacePageInner() {
     } finally {
       setLoading(false);
     }
-  }, [sectionPath, stem]);
+  }, [dossierId, sectionPath, stem]);
 
   useEffect(() => {
     loadDocument();
@@ -120,7 +121,7 @@ function DocumentWorkspacePageInner() {
     try {
       setSource(
         await apiFetch<SourceDoc>(
-          `/api/v1/dossier/source?section_path=${encodeURIComponent(sectionPath)}&stem=${encodeURIComponent(stem)}`,
+          dossierApi(dossierId, `/source?section_path=${encodeURIComponent(sectionPath)}&stem=${encodeURIComponent(stem)}`),
         ),
       );
     } catch (err) {
@@ -128,24 +129,24 @@ function DocumentWorkspacePageInner() {
     } finally {
       setSourceLoading(false);
     }
-  }, [sectionPath, stem, source, sourceLoading]);
+  }, [dossierId, sectionPath, stem, source, sourceLoading]);
 
   const loadCatalogue = useCallback(async () => {
     if (catalogue.length) return;
     try {
-      const plan = await apiFetch<PlanModule[]>("/api/v1/dossier/plan");
+      const plan = await apiFetch<PlanModule[]>(dossierApi(dossierId, "/plan"));
       setCatalogue(plan.flatMap((m) => m.sections.map((s) => ({ path: s.path, title: s.title }))));
     } catch {
       /* autocomplete is a nicety; failing silently is fine */
     }
-  }, [catalogue.length]);
+  }, [dossierId, catalogue.length]);
 
   const loadValidation = useCallback(async () => {
     setValidationLoading(true);
     try {
       setValidation(
         await apiFetch<ValidationReport>(
-          `/api/v1/dossier/validate?section_path=${encodeURIComponent(sectionPath)}&stem=${encodeURIComponent(stem)}`,
+          dossierApi(dossierId, `/validate?section_path=${encodeURIComponent(sectionPath)}&stem=${encodeURIComponent(stem)}`),
         ),
       );
     } catch (err) {
@@ -153,7 +154,7 @@ function DocumentWorkspacePageInner() {
     } finally {
       setValidationLoading(false);
     }
-  }, [sectionPath, stem]);
+  }, [dossierId, sectionPath, stem]);
 
   useEffect(() => {
     if (tab === "source") loadSource();
@@ -175,7 +176,7 @@ function DocumentWorkspacePageInner() {
   const saveEdit = async () => {
     setIsSaving(true);
     try {
-      await apiJson("/api/v1/dossier/document", "PUT", { section_path: sectionPath, stem, markdown: editMarkdown });
+      await apiJson(dossierApi(dossierId, "/document"), "PUT", { section_path: sectionPath, stem, markdown: editMarkdown });
       setDetail((prev) => (prev ? { ...prev, markdown: editMarkdown, status: "edited" } : prev));
       setValidation(null);
       setIsEditing(false);
@@ -191,7 +192,7 @@ function DocumentWorkspacePageInner() {
     if (!feedback.trim() || !confirmRevertIfApproved()) return;
     setIsRegenerating(true);
     try {
-      const data = await apiJson("/api/v1/dossier/feedback", "POST", {
+      const data = await apiJson(dossierApi(dossierId, "/feedback"), "POST", {
         section_path: sectionPath,
         stem,
         feedback: feedback.trim(),
@@ -210,7 +211,7 @@ function DocumentWorkspacePageInner() {
     if (!confirmRevertIfApproved()) return;
     setIsAugmenting(true);
     try {
-      const data = await apiJson("/api/v1/dossier/generate", "POST", {
+      const data = await apiJson(dossierApi(dossierId, "/generate"), "POST", {
         section_path: sectionPath,
         stem,
         augment: true,
@@ -227,7 +228,7 @@ function DocumentWorkspacePageInner() {
   const approve = async () => {
     setIsApproving(true);
     try {
-      await apiJson("/api/v1/dossier/approve", "POST", { section_path: sectionPath, stem });
+      await apiJson(dossierApi(dossierId, "/approve"), "POST", { section_path: sectionPath, stem });
       setDetail((prev) => (prev ? { ...prev, status: "approved" } : prev));
       toast.success("Document approved.");
     } catch (err) {
@@ -240,7 +241,7 @@ function DocumentWorkspacePageInner() {
   const downloadDocx = async () => {
     try {
       await downloadFromApi(
-        `/api/v1/dossier/export?section_path=${encodeURIComponent(sectionPath)}&stem=${encodeURIComponent(stem)}&format=docx`,
+        dossierApi(dossierId, `/export?section_path=${encodeURIComponent(sectionPath)}&stem=${encodeURIComponent(stem)}&format=docx`),
         `${stem}.docx`,
       );
     } catch (err) {
@@ -251,7 +252,7 @@ function DocumentWorkspacePageInner() {
   const reExtractFields = async () => {
     setReExtracting(true);
     try {
-      setFields(await apiJson("/api/v1/dossier/extract", "POST", { section_path: sectionPath, stem }) as ExtractedField[]);
+      setFields(await apiJson(dossierApi(dossierId, "/extract"), "POST", { section_path: sectionPath, stem }) as ExtractedField[]);
       toast.success("Fields re-extracted.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to extract fields.");
@@ -265,13 +266,13 @@ function DocumentWorkspacePageInner() {
     if (!ctdPath) return;
     setReclassifying(true);
     try {
-      const data = await apiJson("/api/v1/dossier/reclassify", "POST", {
+      const data = await apiJson(dossierApi(dossierId, "/reclassify"), "POST", {
         section_path: sectionPath,
         stem,
         ctd_path: ctdPath,
       }) as ReclassifyResponse;
       toast.success(`Moved to ${ctdPath}.`);
-      router.replace(workspaceHref(data.section_path, data.stem));
+      router.replace(workspaceHref(dossierId, data.section_path, data.stem));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to reclassify.");
     } finally {
@@ -286,7 +287,7 @@ function DocumentWorkspacePageInner() {
       <header className="w-full max-w-5xl mx-auto px-6 pt-6 pb-4 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <Link
-            href="/dossier"
+            href={`/d/${dossierId}/structure`}
             className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:border-indigo-200 transition-colors shrink-0"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -306,7 +307,7 @@ function DocumentWorkspacePageInner() {
           </div>
         </div>
         <Link
-          href={`/chat?section_path=${encodeURIComponent(sectionPath)}&stem=${encodeURIComponent(stem)}`}
+          href={`/d/${dossierId}/chat?section_path=${encodeURIComponent(sectionPath)}&stem=${encodeURIComponent(stem)}`}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-sm hover:bg-indigo-100 transition-colors shrink-0"
         >
           <MessageSquare className="w-3.5 h-3.5" />
@@ -359,7 +360,7 @@ function DocumentWorkspacePageInner() {
                       size="sm"
                       onClick={() =>
                         downloadFromApi(
-                          `/api/v1/dossier/original?section_path=${encodeURIComponent(sectionPath)}&stem=${encodeURIComponent(stem)}`,
+                          dossierApi(dossierId, `/original?section_path=${encodeURIComponent(sectionPath)}&stem=${encodeURIComponent(stem)}`),
                           meta.filename!,
                         ).catch((err) => toast.error(err instanceof Error ? err.message : "Failed to download original."))
                       }

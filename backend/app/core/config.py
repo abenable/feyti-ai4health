@@ -17,7 +17,11 @@ class Settings(BaseSettings):
     CLOUDFLARE_ACCOUNT_ID: str = ""
     CLOUDFLARE_API_TOKEN: str = ""
     CLOUDFLARE_OCR_MODEL: str = "@cf/moondream/moondream3.1-9B-A2B"
-    DOSSIER_ROOT: str = "./dossier"
+    # Container directory holding one subfolder per dossier.
+    DOSSIERS_ROOT: str = "./dossiers"
+    # Pre-multi-dossier layout ("./dossier", singular) — migrated into
+    # DOSSIERS_ROOT/default on first run if found. Safe to ignore afterwards.
+    LEGACY_DOSSIER_ROOT: str = "./dossier"
     # Hosted Aicyclinder model (ngrok public URL from the hosting notebook).
     AICYCLINDER_API_URL: str = "https://congenial-premises-chill.ngrok-free.dev"
     BACKEND_CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"

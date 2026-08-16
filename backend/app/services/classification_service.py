@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 
 from app.core.exceptions import DocumentAnalysisError
 from app.services.ctd_map import CTD_MAP, MODULE_NAMES
@@ -32,7 +33,7 @@ def _normalize_path(raw) -> str:
     return candidate
 
 
-async def classify(text: str) -> dict:
+async def classify(text: str, root: Path) -> dict:
     """Classify + summarize a document in one LLM call.
 
     Returns {section_path, title, module, confidence, justification, summary,
@@ -40,7 +41,7 @@ async def classify(text: str) -> dict:
     summary/key_points are judge-ready even when the input is raw OCR text.
     """
     catalogue = "\n".join(f"{p}: {t}" for p, t in CTD_MAP.items())
-    product = context_block("PRODUCT CONTEXT (this dossier is for the following product):")
+    product = context_block(root, "PRODUCT CONTEXT (this dossier is for the following product):")
     prompt = (
         "You are a regulatory document analyst for an ICH-M4 CTD dossier.\n"
         "The DOCUMENT text may come from OCR and contain noise — interpret and "

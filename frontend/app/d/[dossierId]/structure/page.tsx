@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import {
@@ -20,7 +20,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { apiFetch, apiJson, downloadFromApi, workspaceHref } from "@/lib/api";
+import { apiFetch, apiJson, dossierApi, downloadFromApi, workspaceHref } from "@/lib/api";
 import type { NewSectionResponse, PlanModule, ReadinessReport } from "@/lib/types";
 
 function planStatusClasses(status: string) {
@@ -55,7 +55,8 @@ const VERDICT_META: Record<string, { label: string; text: string; ring: string }
   not_ready: { label: "Drafting in progress", text: "text-rose-700", ring: "ring-rose-200 bg-rose-50" },
 };
 
-export default function DossierPage() {
+export default function DossierStructurePage() {
+  const { dossierId } = useParams<{ dossierId: string }>();
   const router = useRouter();
   const [plan, setPlan] = useState<PlanModule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,13 +72,13 @@ export default function DossierPage() {
 
   const fetchPlan = useCallback(async () => {
     try {
-      setPlan(await apiFetch<PlanModule[]>("/api/v1/dossier/plan"));
+      setPlan(await apiFetch<PlanModule[]>(dossierApi(dossierId, "/plan")));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load plan.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [dossierId]);
 
   useEffect(() => {
     fetchPlan();
@@ -100,12 +101,12 @@ export default function DossierPage() {
     if (!newSection) return;
     setCreating(augment ? "ai" : "blank");
     try {
-      const data = await apiJson("/api/v1/dossier/section", "POST", {
+      const data = await apiJson(dossierApi(dossierId, "/section"), "POST", {
         ctd_path: newSection.path,
         augment,
       }) as NewSectionResponse;
       toast.success(augment ? "Section drafted — review the ⚠️ gaps." : "Blank section created.");
-      router.push(`${workspaceHref(data.section_path, data.stem)}${augment ? "" : "&edit=1"}`);
+      router.push(`${workspaceHref(dossierId, data.section_path, data.stem)}${augment ? "" : "&edit=1"}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create section.");
     } finally {
@@ -118,7 +119,7 @@ export default function DossierPage() {
     setReadinessOpen(true);
     setReadinessLoading(true);
     try {
-      setReadiness(await apiFetch<ReadinessReport>("/api/v1/dossier/readiness"));
+      setReadiness(await apiFetch<ReadinessReport>(dossierApi(dossierId, "/readiness")));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to analyze readiness.");
       setReadinessOpen(false);
@@ -130,7 +131,7 @@ export default function DossierPage() {
   const exportAll = async () => {
     setIsExporting(true);
     try {
-      await downloadFromApi("/api/v1/dossier/export/all?format=docx", "approved-dossier.zip");
+      await downloadFromApi(dossierApi(dossierId, "/export/all?format=docx"), "approved-dossier.zip");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to export dossier.");
     } finally {
@@ -245,7 +246,7 @@ export default function DossierPage() {
                                   {sec.documents.map((doc) => (
                                     <Link
                                       key={`${doc.section_path}/${doc.stem}`}
-                                      href={workspaceHref(doc.section_path, doc.stem)}
+                                      href={workspaceHref(dossierId, doc.section_path, doc.stem)}
                                       onClick={() => setNewSection(null)}
                                       className="w-full text-left rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2 transition-colors text-slate-700 hover:bg-indigo-50/40"
                                     >

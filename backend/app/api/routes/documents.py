@@ -1,5 +1,8 @@
 import logging
-from fastapi import APIRouter, File, UploadFile, HTTPException
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
+from app.api.deps import require_dossier_root
 from app.services.document_processor import DocumentProcessor
 from app.services.classification_service import classify
 from app.services.extraction_service import extract_fields
@@ -27,7 +30,7 @@ MAX_FILE_SIZE = 15 * 1024 * 1024  # 15 MB limit for Gemini
 
 
 @router.post("/process", response_model=ProcessResponse)
-async def process(file: UploadFile = File(...)):
+async def process(file: UploadFile = File(...), root: Path = Depends(require_dossier_root)):
     """Run extraction, classification, and file into the dossier."""
     if not file:
         raise HTTPException(status_code=400, detail="No file was uploaded.")
@@ -50,20 +53,20 @@ async def process(file: UploadFile = File(...)):
         )
 
     text, ocr_used, chunks = extract(file_bytes, file.content_type, file.filename)
-    classification = await classify(text)  # includes summary + key_points
-    placed = file_into_dossier(file_bytes, file.filename, classification, text, chunks)
+    classification = await classify(text, root)  # includes summary + key_points
+    placed = file_into_dossier(root, file_bytes, file.filename, classification, text, chunks)
 
     # Information extraction: a failure here must not sink the whole upload.
     fields: list[dict] = []
     try:
-        fields = await extract_fields(text, classification)
+        fields = await extract_fields(text, classification, root)
         write_fields(placed["section_dir"], placed["stem"], fields)
     except Exception as exc:
         logger.warning("Field extraction failed for %s: %s", file.filename, exc)
 
     # Auto-generate the initial CTD section draft for review.
     try:
-        draft = await generate_document(text, classification)
+        draft = await generate_document(text, classification, root)
         write_generated(placed["section_dir"], placed["stem"], draft, status="draft")
     except Exception as exc:
         logger.warning("Auto-generation failed for %s: %s", file.filename, exc)
