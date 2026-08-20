@@ -13,6 +13,7 @@ prompt, same as generate_json()'s callers already do for the other providers.
 """
 
 import logging
+import re
 
 import httpx
 from google.genai import types
@@ -26,9 +27,21 @@ _KIMI_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 _AICYCLINDER_TIMEOUT = httpx.Timeout(180.0, connect=10.0)
 
 
+def _strip_json_fence(raw: str) -> str:
+    """Providers without native JSON mode (e.g. the self-hosted Aicyclinder
+    base model) sometimes wrap the response in a ```json ... ``` code fence."""
+    stripped = raw.strip()
+    if stripped.startswith("```"):
+        stripped = re.sub(r"^```(?:json)?\n?", "", stripped)
+        stripped = re.sub(r"\n?```$", "", stripped)
+    return stripped.strip()
+
+
 async def generate_json(prompt: str) -> str:
-    """Return the model's raw response text, constrained to JSON."""
-    return await _generate(prompt, json_mode=True)
+    """Return the model's raw response text, constrained to JSON (any
+    markdown code fence already stripped)."""
+    raw = await _generate(prompt, json_mode=True)
+    return _strip_json_fence(raw)
 
 
 async def generate_text(prompt: str, max_tokens: int | None = None) -> str:

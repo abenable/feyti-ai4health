@@ -40,20 +40,19 @@ async def _fake_classify_section_offline(text: str) -> str | None:
     return None
 
 
-async def test_classify_strips_markdown_json_fence(monkeypatch, tmp_path):
-    """Chat models without native JSON mode (the self-hosted base model) can
-    wrap the response in ```json ... ``` -- must still parse."""
-    from app.services import classification_service
+async def test_generate_json_strips_markdown_fence(monkeypatch):
+    """Providers without native JSON mode (the self-hosted base model) can
+    wrap the response in ```json ... ``` -- generate_json must still return
+    clean JSON, for every caller (classification, extraction, ...)."""
+    from app.services import llm
 
-    async def fake_generate_json(prompt: str) -> str:
+    async def fake_aicyclinder(prompt, max_tokens=None):
         return '```json\n{"section_path": "3.2.P.8.3", "confidence": 0.95}\n```'
 
-    monkeypatch.setattr(classification_service, "generate_json", fake_generate_json)
-    monkeypatch.setattr(classification_service, "_classify_section", _fake_classify_section_offline)
+    monkeypatch.setattr(llm, "_aicyclinder", fake_aicyclinder)
 
-    result = await classification_service.classify("stability report", tmp_path)
-    assert result["section_path"] == "3.2.P.8.3"
-    assert result["confidence"] == 0.95
+    raw = await llm.generate_json("prompt")
+    assert raw == '{"section_path": "3.2.P.8.3", "confidence": 0.95}'
 
 
 async def test_classify_hallucination_guard(monkeypatch, tmp_path):

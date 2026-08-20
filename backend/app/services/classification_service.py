@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from pathlib import Path
 
 import httpx
@@ -38,16 +37,6 @@ async def _classify_section(text: str) -> str | None:
     except (httpx.HTTPError, ValueError) as exc:
         logger.warning("[classify] CTD classifier model unreachable, falling back to LLM: %s", exc)
         return None
-
-
-def _strip_json_fence(raw: str) -> str:
-    """Chat models without native JSON mode (e.g. the self-hosted base model)
-    sometimes wrap the response in a ```json ... ``` code fence."""
-    stripped = raw.strip()
-    if stripped.startswith("```"):
-        stripped = re.sub(r"^```(?:json)?\n?", "", stripped)
-        stripped = re.sub(r"\n?```$", "", stripped)
-    return stripped.strip()
 
 
 def _normalize_path(raw) -> str:
@@ -108,7 +97,7 @@ async def classify(text: str, root: Path) -> dict:
 
     try:
         raw = await generate_json(prompt)  # aicyclinder, falling back to kimi then gemini
-        data = json.loads(_strip_json_fence(raw))
+        data = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise DocumentAnalysisError(
             "Classification service returned invalid JSON.", status_code=502
