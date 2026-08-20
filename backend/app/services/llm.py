@@ -24,7 +24,9 @@ from app.services.gemini_service import get_client
 logger = logging.getLogger(__name__)
 
 _KIMI_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
-_AICYCLINDER_TIMEOUT = httpx.Timeout(180.0, connect=10.0)
+# Kept well under the public gateway's own timeout (~60s) so a slow/overloaded
+# box triggers the Kimi/Gemini fallback instead of the gateway 504ing first.
+_AICYCLINDER_TIMEOUT = httpx.Timeout(20.0, connect=5.0)
 
 
 def _strip_json_fence(raw: str) -> str:

@@ -147,8 +147,10 @@ async def generate_document(
     """
     prompt = _build_prompt(extracted_text, classification, root, prior_markdown, feedback, augment)
     # A full CTD section can be long; lift the provider's default cap so the
-    # document isn't truncated mid-section.
-    raw = await llm.generate_text(prompt, max_tokens=8192)
+    # document isn't truncated mid-section. Capped well below the provider max
+    # (was 8192) — this is the longest of the three sequential LLM calls and
+    # directly drives wall-clock time on the slow-decode self-hosted box.
+    raw = await llm.generate_text(prompt, max_tokens=3000)
     return _strip_placeholders(raw)
 
 
