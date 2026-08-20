@@ -1,10 +1,11 @@
 """Chat backends for the demo.
 
 Two providers, both surfaced as "Aicyclinder" to the user:
-  • "aicyclinder" → the hosted fine-tuned model (Unsloth + FastAPI behind ngrok).
-    The model server has no CORS headers, so we forward server-side.
-  • "cloud"       → DeepSeek (kept internal; never named in the UI). A fallback
-    that stays responsive when the hosted model is down.
+  • "aicyclinder" → the self-hosted base model (unsloth/Qwen3.8-27B, LoRA
+    disabled server-side — the CTD-classifier adapter only emits section
+    codes, not conversation). The default; requests to it that fail
+    (box unreachable, HTTP error) fall back to "cloud" automatically.
+  • "cloud"       → Kimi (kept internal; never named in the UI).
 """
 
 import logging
@@ -24,17 +25,12 @@ from app.services.dossier_service import (
     _resolve_section_dir,
     _safe_filename,
 )
-from app.services.llm import deepseek_chat
+from app.services.llm import aicyclinder_chat, kimi_chat
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Generation on an L4 can take a while; give it room. ngrok header skips the
-# free-tier browser-warning interstitial.
-_TIMEOUT = httpx.Timeout(180.0, connect=10.0)
-_HEADERS = {"ngrok-skip-browser-warning": "true"}
-
-_CLOUD = "cloud"  # internal alias for DeepSeek
+_CLOUD = "cloud"  # internal alias for Kimi
 
 
 def _dossier_system_prompt(root: Path, section_path: str | None, stem: str | None) -> str | None:
@@ -92,33 +88,21 @@ async def chat(req: ChatRequest, root: Path = Depends(require_dossier_root)):
 
 
 async def _chat_aicyclinder(req: ChatRequest, root: Path) -> ChatResponse:
-    url = f"{settings.AICYCLINDER_API_URL.rstrip('/')}/generate"
-    payload = {
-        "messages": _with_system_prompt(req, root),
-        "max_new_tokens": req.max_new_tokens,
-        "temperature": req.temperature,
-    }
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            resp = await client.post(url, json=payload, headers=_HEADERS)
-            resp.raise_for_status()
-            data = resp.json()  # ValueError if ngrok served an HTML error page
-    except httpx.HTTPStatusError as exc:
-        logger.error("Aicyclinder model returned %s: %s", exc.response.status_code, exc.response.text[:300])
-        raise HTTPException(status_code=502, detail="The Aicyclinder model returned an error.") from exc
-    except httpx.RequestError as exc:
-        logger.error("Cannot reach Aicyclinder model at %s: %s", url, exc)
-        raise HTTPException(status_code=503, detail="The Aicyclinder model is offline or unreachable.") from exc
-    except ValueError as exc:  # non-JSON body (e.g. ngrok "tunnel offline" page)
-        logger.error("Aicyclinder model returned a non-JSON response from %s", url)
-        raise HTTPException(status_code=503, detail="The Aicyclinder model is offline or unreachable.") from exc
-
-    return ChatResponse(response=data.get("response", ""))
+        text = await aicyclinder_chat(
+            _with_system_prompt(req, root),
+            max_tokens=req.max_new_tokens,
+            temperature=req.temperature,
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("Aicyclinder unreachable, falling back to Kimi: %s", exc)
+        return await _chat_cloud(req, root)
+    return ChatResponse(response=text)
 
 
 async def _chat_cloud(req: ChatRequest, root: Path) -> ChatResponse:
     try:
-        text = await deepseek_chat(
+        text = await kimi_chat(
             _with_system_prompt(req, root),
             max_tokens=req.max_new_tokens,
             temperature=req.temperature,
@@ -138,14 +122,14 @@ async def chat_health(dossier_id: str, provider: str = "aicyclinder"):
     Provider health doesn't depend on dossier content; dossier_id is only here
     because it's part of this route's URL prefix."""
     if provider == _CLOUD:
-        if settings.DEEPSEEK_API_KEY:
+        if settings.KIMI_API_KEY:
             return {"status": "ok"}
         raise HTTPException(status_code=503, detail="Cloud offline")
 
-    url = f"{settings.AICYCLINDER_API_URL.rstrip('/')}/health"
+    url = f"{settings.FEYTI_CTD_API_URL.rstrip('/')}/ping"
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(8.0)) as client:
-            resp = await client.get(url, headers=_HEADERS)
+            resp = await client.get(url)
             resp.raise_for_status()
         return {"status": "ok"}
     except Exception:

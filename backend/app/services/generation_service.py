@@ -147,7 +147,7 @@ async def generate_document(
     """
     prompt = _build_prompt(extracted_text, classification, root, prior_markdown, feedback, augment)
     # A full CTD section can be long; lift the provider's default cap so the
-    # document isn't truncated mid-section. 8192 is DeepSeek's max.
+    # document isn't truncated mid-section.
     raw = await llm.generate_text(prompt, max_tokens=8192)
     return _strip_placeholders(raw)
 
