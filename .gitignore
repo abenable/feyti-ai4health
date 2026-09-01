@@ -40,3 +40,6 @@ yarn-error.log*
 # Design specs / task plans (keep local)
 specs/
 tasks/
+
+# Runtime regulatory intelligence store
+/regintel/
