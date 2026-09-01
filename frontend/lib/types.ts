@@ -180,3 +180,166 @@ export interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
 }
+
+// ── Pharmacovigilance / ADR ──────────────────────────────────────────────────
+
+export type PVSeverity =
+  | "mild"
+  | "moderate"
+  | "severe"
+  | "life_threatening"
+  | "fatal";
+
+export type PVCausality =
+  | "certain"
+  | "probable"
+  | "possible"
+  | "unlikely"
+  | "conditional"
+  | "unassessable";
+
+export type PVOutcome =
+  | "recovered"
+  | "recovering"
+  | "not_recovered"
+  | "fatal"
+  | "unknown";
+
+export type PVActionTaken =
+  | "withdrawn"
+  | "dose_reduced"
+  | "dose_increased"
+  | "dose_not_changed"
+  | "unknown"
+  | "not_applicable";
+
+export type PVReportStatus = "draft" | "submitted" | "nullified" | "followup";
+export type PVCaseReportType = "initial" | "followup" | "nullification";
+export type PVExtractionSource = "llm" | "rules";
+
+export interface PVPatient {
+  identifier?: string | null;
+  age?: number | null;
+  age_group?: string | null;
+  sex?: string | null;
+  initials?: string | null;
+  dob?: string | null;
+}
+
+export interface PVDrug {
+  name?: string | null;
+  batch_number?: string | null;
+  dose_text?: string | null;
+  route_of_administration?: string | null;
+  indication?: string | null;
+  action_taken?: PVActionTaken | null;
+  therapy_start_date?: string | null;
+  therapy_end_date?: string | null;
+}
+
+export interface MedDRACoding {
+  pt_code: string;
+  pt_name: string;
+  version?: string | null;
+  source?: "llm_suggestion" | "user_confirmed" | "cache" | null;
+  confirmed_at?: string | null;
+}
+
+export interface PVFollowUp {
+  report_id: string;
+  date: string;
+  description?: string | null;
+}
+
+export interface PVExpectedReaction {
+  pt_code: string;
+  pt_name: string;
+  severity?: PVSeverity | null;
+  causality?: PVCausality | null;
+  notes?: string | null;
+}
+
+export interface ADRReport {
+  report_id: string;
+  worldwide_unique_id?: string | null;
+  case_version: number;
+  case_report_type: PVCaseReportType;
+  organization?: string | null;
+  product_name: string;
+  drug?: PVDrug | null;
+  reaction_pt_code?: string | null;
+  reaction_pt_name?: string | null;
+  reaction_meddra_term?: string | null;
+  reaction_description?: string | null;
+  reaction_start_date?: string | null;
+  seriousness_criteria: string[];
+  is_serious: boolean;
+  severity?: PVSeverity | null;
+  causality?: PVCausality | null;
+  outcome?: PVOutcome | null;
+  patient?: PVPatient | null;
+  reporter_name?: string | null;
+  reporter_email?: string | null;
+  reporter_phone?: string | null;
+  reporter_organisation?: string | null;
+  reporter_qualification?: string | null;
+  reporter_country?: string | null;
+  expectedness?: "expected" | "unexpected" | "not_assessable" | null;
+  expectedness_rationale?: string | null;
+  expectedness_assessed_by?: string | null;
+  expectedness_assessed_at?: string | null;
+  expectedness_rsi_version?: string | null;
+  is_susar: boolean;
+  meddra?: MedDRACoding | null;
+  meddra_version?: string | null;
+  follow_ups: PVFollowUp[];
+  status: PVReportStatus;
+  first_received_date?: string | null;
+  nullification_reason?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface PVMinimumCriteriaCheck {
+  patient: boolean;
+  reporter: boolean;
+  product: boolean;
+  reaction: boolean;
+  missing: string[];
+  description: string;
+}
+
+export interface PVReportDraft {
+  product_name?: string | null;
+  patient?: PVPatient | null;
+  drug?: PVDrug | null;
+  reaction_meddra_term?: string | null;
+  reaction_description?: string | null;
+  reaction_start_date?: string | null;
+  seriousness_criteria?: string[] | null;
+  is_serious?: boolean | null;
+  severity?: PVSeverity | null;
+  causality?: PVCausality | null;
+  outcome?: PVOutcome | null;
+  reporter_name?: string | null;
+  reporter_email?: string | null;
+  reporter_phone?: string | null;
+  reporter_organisation?: string | null;
+  reporter_qualification?: string | null;
+  reporter_country?: string | null;
+  first_received_date?: string | null;
+  worldwide_unique_id?: string | null;
+  organization?: string | null;
+  extraction_source: PVExtractionSource;
+}
+
+export interface GeneratedDoc {
+  section_path: string;
+  stem: string;
+  filename: string;
+  title: string;
+  module: string;
+  status: string;
+  updated_at: string;
+  feedback_count: number;
+}
