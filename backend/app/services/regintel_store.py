@@ -47,35 +47,52 @@ def _seed_sources() -> None:
             "key": "NDA_UG",
             "country": "Uganda",
             "authority": "NDA Uganda",
-            "listing_url": "",
+            "listing_urls": [
+                "https://www.nda.or.ug/category/alerts/",
+                "https://www.nda.or.ug/category/news/",
+                "https://www.nda.or.ug/circulars-2/",
+            ],
             "enabled": True,
         },
         {
             "key": "TFDA_TZ",
             "country": "Tanzania",
             "authority": "TFDA Tanzania",
-            "listing_url": "",
+            "listing_urls": [
+                "https://www.tmda.go.tz/registration",
+                "https://www.tmda.go.tz/fees",
+                "https://www.tmda.go.tz/",
+            ],
             "enabled": True,
         },
         {
             "key": "PPB_KE",
             "country": "Kenya",
             "authority": "PPB Kenya",
-            "listing_url": "",
+            "listing_urls": [
+                "https://www.ppb.go.ke/index.php/product-registration",
+                "https://www.ppb.go.ke/index.php/fees-charges",
+            ],
             "enabled": True,
         },
         {
             "key": "NAFDAC_NG",
             "country": "Nigeria",
             "authority": "NAFDAC Nigeria",
-            "listing_url": "",
+            "listing_urls": [
+                "https://www.nafdac.gov.ng/product-registration/",
+                "https://www.nafdac.gov.ng/fee-schedule/",
+            ],
             "enabled": True,
         },
         {
             "key": "Rwanda_FDA",
             "country": "Rwanda",
             "authority": "Rwanda FDA",
-            "listing_url": "",
+            "listing_urls": [
+                "https://www.rfa.gov.rw/product-registration",
+                "https://www.rwandafda.gov.rw",
+            ],
             "enabled": True,
         },
     ]
@@ -100,8 +117,11 @@ def add_or_update_document(doc: dict) -> None:
     now_iso = datetime.utcnow().isoformat()
     for existing in docs:
         if existing.get("content_hash") == doc.get("content_hash"):
-            # Update last_seen
+            # Update fields and timestamps
+            existing.update(doc)
             existing["last_seen"] = now_iso
+            # Preserve original first_seen if present, else set now
+            existing.setdefault("first_seen", now_iso)
             _save(_DOCUMENTS_PATH, docs)
             return
     # New document

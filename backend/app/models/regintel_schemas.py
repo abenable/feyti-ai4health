@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -9,7 +9,7 @@ class SourceKey(BaseModel):
     key: str
     country: str
     authority: str
-    listing_url: str
+    listing_urls: List[str] = []
     enabled: bool = True
 
 
