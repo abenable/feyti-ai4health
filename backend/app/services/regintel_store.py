@@ -40,6 +40,16 @@ def get_sources() -> List[SourceKey]:
     return [SourceKey(**item) for item in raw]
 
 
+def touch_source(source_key: str) -> None:
+    """Record the last successful crawl time for one configured source."""
+    sources = get_sources()
+    for source in sources:
+        if source.key == source_key:
+            source.last_crawled = datetime.utcnow()
+            break
+    _save(_SOURCES_PATH, [json.loads(item.model_dump_json()) for item in sources])
+
+
 def _seed_sources() -> None:
     # Minimal placeholder seed for East‑African authorities.
     placeholder_sources = [

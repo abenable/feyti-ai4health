@@ -74,8 +74,7 @@ def toggle_source(source_key: str = Body(...), enabled: bool = Body(...)):
 
 @router.post("/crawl")
 async def trigger_crawl(source_key: Optional[str] = Query(None)):
-    # For simplicity, ignore source_key filtering – crawl_all respects enabled flag.
-    result = await crawl_all()
+    result = await crawl_all(source_key=source_key)
     return result
 
 

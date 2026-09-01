@@ -76,3 +76,28 @@ def test_add_impact_monkeypatched(monkeypatch):
     assert resp.status_code == 200
     data = resp.json()
     assert data["impact_summary"] == "Impact summary generated"
+
+
+def test_crawl_all_filters_requested_source(monkeypatch):
+    import asyncio
+    from app.models.regintel_schemas import SourceKey
+    from app.services import regintel_crawlers
+
+    sources = [
+        SourceKey(key="ONE", country="One", authority="One", listing_urls=["https://one.example"]),
+        SourceKey(key="TWO", country="Two", authority="Two", listing_urls=["https://two.example"]),
+    ]
+    touched = []
+
+    async def fake_crawl_source(source):
+        if source.key != "ONE":
+            raise AssertionError("should not crawl an unselected source")
+        return []
+
+    monkeypatch.setattr(regintel_crawlers, "get_sources", lambda: sources)
+    monkeypatch.setattr(regintel_crawlers, "_crawl_source", fake_crawl_source)
+    monkeypatch.setattr(__import__("app.services.regintel_store", fromlist=["touch_source"]), "touch_source", lambda key: touched.append(key))
+
+    result = asyncio.run(regintel_crawlers.crawl_all(source_key="ONE"))
+    assert result == {"new_documents": 0, "new_alerts": 0}
+    assert touched == ["ONE"]

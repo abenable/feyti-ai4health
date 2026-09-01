@@ -197,11 +197,14 @@ async def _crawl_source(source: SourceKey) -> List[RegulatoryAlert]:
     return alerts
 
 
-async def crawl_all(enabled_only: bool = True) -> dict:
-    """Crawl all configured sources.
-    Returns a dict with counts of new documents and alerts.
+async def crawl_all(enabled_only: bool = True, source_key: Optional[str] = None) -> dict:
+    """Crawl all configured sources, or one source when *source_key* is set.
+
+    Returns a dict with counts of processed documents and alerts.
     """
     sources = get_sources()
+    if source_key:
+        sources = [s for s in sources if s.key == source_key]
     if enabled_only:
         sources = [s for s in sources if s.enabled]
     tasks = [_crawl_source(s) for s in sources]
@@ -209,11 +212,13 @@ async def crawl_all(enabled_only: bool = True) -> dict:
     all_alerts: List[RegulatoryAlert] = []
     for alerts in results:
         all_alerts.extend(alerts)
-    # Persist alerts
-    for alert in all_alerts:
-        from app.services.regintel_store import add_alert
+    # Persist alerts and the source crawl timestamp.
+    from app.services.regintel_store import add_alert, touch_source
 
+    for alert in all_alerts:
         add_alert(alert)
+    for source in sources:
+        touch_source(source.key)
     return {
         "new_documents": len(all_alerts),
         "new_alerts": len(all_alerts),

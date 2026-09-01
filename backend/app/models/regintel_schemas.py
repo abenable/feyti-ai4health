@@ -11,6 +11,7 @@ class SourceKey(BaseModel):
     authority: str
     listing_urls: List[str] = []
     enabled: bool = True
+    last_crawled: Optional[datetime] = None
 
 
 class RegulatoryAlert(BaseModel):
