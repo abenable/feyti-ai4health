@@ -109,7 +109,7 @@ def get_documents() -> List[dict]:
     return _load(_DOCUMENTS_PATH)
 
 
-def add_or_update_document(doc: dict) -> None:
+def add_or_update_document(doc: dict) -> None:  # Updated to merge fields on duplicate hash
     """Add a new document or update timestamps if content_hash already exists.
     Expected keys: source_key, url, title, content_hash, doc_type, first_seen, last_seen.
     """
