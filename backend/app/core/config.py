@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # generation (llm.py's fallback chain, and chat.py).
     FEYTI_CTD_API_URL: str = "http://44.219.130.128:8080"
     BACKEND_CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+    # Demo defaults for PV E2B exchange
+    PV_SENDER_ID: str = "DemoSender"
+    PV_RECEIVER_ID: str = "DemoReceiver"
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
