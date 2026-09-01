@@ -7,7 +7,7 @@ from pathlib import Path
 
 from app.services import llm
 from app.services.ctd_map import CTD_MAP
-from app.services.dossier_service import context_block
+from app.services.dossier_service import context_block, read_context
 
 
 def _find_parent_context(section_path: str) -> str:
@@ -146,6 +146,11 @@ async def generate_document(
     gap line instead of inventing them.
     """
     prompt = _build_prompt(extracted_text, classification, root, prior_markdown, feedback, augment)
+    # Language hook: if dossier context specifies a non‑English language, instruct the model.
+    ctx = read_context(root)
+    lang = ctx.get("language", "en")
+    if lang and lang != "en":
+        prompt += f"\n\nPlease output the document in {lang}."
     # A full CTD section can be long; lift the provider's default cap so the
     # document isn't truncated mid-section. Capped well below the provider max
     # (was 8192) — this is the longest of the three sequential LLM calls and

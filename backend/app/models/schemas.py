@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Literal
 
 
 class DossierSummary(BaseModel):
@@ -101,6 +102,12 @@ class NewSectionRequest(BaseModel):
     augment: bool = False  # True → AI-author a skeleton; False → blank to write
 
 
+class TranslationRequest(BaseModel):
+    target_language: Literal["en", "fr", "pt", "sw"]
+    section_path: str
+    stem: str
+
+
 class ReclassifyRequest(BaseModel):
     section_path: str  # current folder path
     stem: str
@@ -145,6 +152,7 @@ class ProductContext(BaseModel):
     strength: str = ""
     applicant: str = ""
     market: str = ""  # target region / regulatory authority
+    language: str = "en"  # optional language for generation output
 
 
 class GeneratedDoc(BaseModel):
