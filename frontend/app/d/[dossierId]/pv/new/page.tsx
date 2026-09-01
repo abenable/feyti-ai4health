@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { PVReportForm } from "@/components/pv-report-form";
 import { apiFetch, apiJson, dossierApi } from "@/lib/api";
+import { useLanguage } from "@/lib/i18n";
 import { applyPVReportDraft, createEmptyPVReport } from "@/lib/pv";
 import type {
   ADRReport,
@@ -38,6 +39,7 @@ export default function NewPVReportPage() {
   const [extracting, setExtracting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [extractionSource, setExtractionSource] = useState<PVExtractionSource | null>(null);
+  const { t } = useLanguage();
 
   const selectedDoc = useMemo(
     () => docs.find((doc) => `${doc.section_path}|${doc.stem}` === selectedDocKey),
@@ -105,7 +107,7 @@ export default function NewPVReportPage() {
     <div className="min-h-screen bg-slate-50/60 text-slate-900">
       <div className="mx-auto w-full max-w-6xl space-y-6 px-6 py-8">
         <header className="space-y-2">
-          <h1 className="font-serif text-3xl font-bold">New ADR report</h1>
+          <h1 className="font-serif text-3xl font-bold">{t.pv.newReport}</h1>
           <p className="text-sm text-slate-600">
             Start from a filed source document or enter the case manually. The four ICSR minimum criteria are
             validated as you work.
@@ -119,7 +121,7 @@ export default function NewPVReportPage() {
                 <FileText className="h-5 w-5" />
               </div>
               <div>
-                <CardTitle className="font-serif text-lg">Source document</CardTitle>
+                <CardTitle className="font-serif text-lg">{t.pv.sourceDocument}</CardTitle>
                 <CardDescription className="text-xs">
                   Optional — extracts fields from an already-uploaded CIOMS/ADR document
                 </CardDescription>
@@ -172,7 +174,7 @@ export default function NewPVReportPage() {
           </CardContent>
         </Card>
 
-        <PVReportForm value={form} onChange={setForm} onSubmit={save} submitLabel="Create report" busy={saving} />
+        <PVReportForm value={form} onChange={setForm} onSubmit={save} submitLabel={t.pv.create} busy={saving} />
       </div>
     </div>
   );

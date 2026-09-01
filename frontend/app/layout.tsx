@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Playfair_Display, Manrope } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { Nav } from "@/components/nav";
+import { LanguageProvider } from "@/lib/i18n";
 import "./globals.css";
 
 const playfair = Playfair_Display({
@@ -27,9 +28,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="light">
       <body className={`${playfair.variable} ${manrope.variable} font-sans antialiased bg-[#fdfbf7] text-[#1c1917]`}>
-        <Nav />
-        {children}
-        <Toaster />
+        <LanguageProvider>
+          <Nav />
+          {children}
+          <Toaster />
+        </LanguageProvider>
       </body>
     </html>
   );

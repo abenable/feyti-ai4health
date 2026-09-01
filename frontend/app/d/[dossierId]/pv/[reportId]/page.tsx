@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/card";
 import { PVReportForm } from "@/components/pv-report-form";
 import { apiFetch, apiJson, dossierApi, downloadFromApi } from "@/lib/api";
+import { useLanguage } from "@/lib/i18n";
 import {
   PV_CAUSALITY_OPTIONS,
   PV_SEVERITY_OPTIONS,
@@ -75,6 +76,7 @@ export default function PVReportDetailPage() {
   const [followDate, setFollowDate] = useState(new Date().toISOString().slice(0, 10));
   const [followNote, setFollowNote] = useState("");
   const [addingFollowUp, setAddingFollowUp] = useState(false);
+  const { t } = useLanguage();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -311,7 +313,7 @@ export default function PVReportDetailPage() {
           </Card>
         )}
 
-        <PVReportForm value={form} onChange={setForm} onSubmit={save} submitLabel="Save report" busy={saving} />
+        <PVReportForm value={form} onChange={setForm} onSubmit={save} submitLabel={t.pv.save} busy={saving} />
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <Card className="border-slate-200/70 bg-white/90">
@@ -321,7 +323,7 @@ export default function PVReportDetailPage() {
                   <Sparkles className="h-5 w-5" />
                 </div>
                 <div>
-                  <CardTitle className="font-serif text-lg">MedDRA coding</CardTitle>
+                  <CardTitle className="font-serif text-lg">{t.pv.meddra}</CardTitle>
                   <CardDescription className="text-xs">
                     Suggestions are unconfirmed until a qualified reviewer approves them.
                   </CardDescription>
@@ -388,7 +390,7 @@ export default function PVReportDetailPage() {
                     <CalendarPlus className="h-5 w-5" />
                   </div>
                   <div>
-                    <CardTitle className="font-serif text-lg">Follow-ups</CardTitle>
+                    <CardTitle className="font-serif text-lg">{t.pv.followUps}</CardTitle>
                     <CardDescription className="text-xs">
                       Add case-version notes and requested information.
                     </CardDescription>
@@ -452,7 +454,7 @@ export default function PVReportDetailPage() {
           <CardHeader className="border-b border-slate-100 pb-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <CardTitle className="font-serif text-lg">Reference safety information</CardTitle>
+                <CardTitle className="font-serif text-lg">{t.pv.expectedReactions}</CardTitle>
                 <CardDescription className="text-xs">
                   Expected reactions used for deterministic expectedness and SUSAR checks.
                 </CardDescription>

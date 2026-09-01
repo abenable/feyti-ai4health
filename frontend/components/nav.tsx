@@ -6,6 +6,8 @@ import { useParams, usePathname } from "next/navigation";
 import { Activity, ArrowLeftRight, BookOpen, FolderTree, Globe2, LayoutDashboard, MessageSquare, Wifi, WifiOff } from "lucide-react";
 
 import { apiFetch, getApiUrl } from "@/lib/api";
+import { useLanguage } from "@/lib/i18n";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import type { DossierSummary } from "@/lib/types";
 import {
   Tooltip,
@@ -19,6 +21,7 @@ export function Nav() {
   const { dossierId } = useParams<{ dossierId?: string }>();
   const [isBackendOnline, setIsBackendOnline] = useState<boolean | null>(null);
   const [dossierName, setDossierName] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     const checkHealth = async () => {
@@ -50,12 +53,12 @@ export function Nav() {
 
   const links = dossierId
     ? [
-        { href: `/d/${dossierId}`, label: "Dashboard", icon: LayoutDashboard },
-        { href: `/d/${dossierId}/structure`, label: "Structure", icon: FolderTree },
-        { href: `/d/${dossierId}/pv`, label: "PV / ADR", icon: Activity },
-        { href: `/d/${dossierId}/regintel`, label: "Reg Intel", icon: Globe2 },
-        { href: `/d/${dossierId}/literature`, label: "Literature", icon: BookOpen },
-        { href: `/d/${dossierId}/chat`, label: "Chat", icon: MessageSquare },
+        { href: `/d/${dossierId}`, label: t.nav.dashboard, icon: LayoutDashboard },
+        { href: `/d/${dossierId}/structure`, label: t.nav.structure, icon: FolderTree },
+        { href: `/d/${dossierId}/pv`, label: t.nav.pv, icon: Activity },
+        { href: `/d/${dossierId}/regintel`, label: t.nav.regintel, icon: Globe2 },
+        { href: `/d/${dossierId}/literature`, label: t.nav.literature, icon: BookOpen },
+        { href: `/d/${dossierId}/chat`, label: t.nav.chat, icon: MessageSquare },
       ]
     : [];
 
@@ -76,6 +79,7 @@ export function Nav() {
           </div>
 
           <div className="flex items-center gap-1">
+            <LanguageSwitcher />
             {links.map(({ href, label, icon: Icon }) => {
               // The dashboard link (bare /d/{id}) must match exactly, or it would
               // also light up on /d/{id}/structure and /d/{id}/chat.

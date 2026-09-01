@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiFetch, apiJson, dossierApi } from "@/lib/api";
+import { useLanguage } from "@/lib/i18n";
 import type { LiteratureResult, LiteratureSavedSearch, LiteratureSearchEntry } from "@/lib/types";
 
 const inputClass = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100";
@@ -23,6 +24,7 @@ export default function LiteratureSearchPage() {
   const [searches, setSearches] = useState<LiteratureSearchEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [filingUrl, setFilingUrl] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   const loadSearches = useCallback(async () => {
     try {
@@ -97,8 +99,8 @@ export default function LiteratureSearchPage() {
               <BookOpen className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="font-serif text-3xl font-bold leading-none">Literature Search</h1>
-              <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Global and African sources</p>
+              <h1 className="font-serif text-3xl font-bold leading-none">{t.literature.title}</h1>
+              <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{t.literature.subtitle}</p>
             </div>
           </div>
           <p className="max-w-2xl text-sm text-slate-600">
@@ -115,23 +117,23 @@ export default function LiteratureSearchPage() {
             <CardContent className="space-y-4 pt-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5 lg:items-end">
                 <label className="space-y-1.5 lg:col-span-2">
-                  <span className="text-xs font-semibold text-slate-600">Query</span>
+                  <span className="text-xs font-semibold text-slate-600">{t.literature.query}</span>
                   <input className={inputClass} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="artemisinin resistance Uganda" />
                 </label>
                 <label className="space-y-1.5">
-                  <span className="text-xs font-semibold text-slate-600">Region</span>
+                  <span className="text-xs font-semibold text-slate-600">{t.literature.region}</span>
                   <input className={inputClass} value={region} onChange={(event) => setRegion(event.target.value)} placeholder="Uganda" />
                 </label>
                 <label className="space-y-1.5">
-                  <span className="text-xs font-semibold text-slate-600">From</span>
+                  <span className="text-xs font-semibold text-slate-600">{t.literature.from}</span>
                   <input type="date" className={inputClass} value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
                 </label>
                 <label className="space-y-1.5">
-                  <span className="text-xs font-semibold text-slate-600">To</span>
+                  <span className="text-xs font-semibold text-slate-600">{t.literature.to}</span>
                   <input type="date" className={inputClass} value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
                 </label>
                 <label className="space-y-1.5 lg:col-span-4">
-                  <span className="text-xs font-semibold text-slate-600">Topics</span>
+                  <span className="text-xs font-semibold text-slate-600">{t.literature.topics}</span>
                   <input className={inputClass} value={topics} onChange={(event) => setTopics(event.target.value)} placeholder="safety, efficacy, resistance" />
                 </label>
                 <Button className="lg:col-span-1" onClick={search} disabled={loading}>
@@ -176,8 +178,8 @@ export default function LiteratureSearchPage() {
 
           <Card>
             <CardHeader className="border-b border-slate-100 pb-4">
-              <CardTitle className="font-serif text-lg">Past searches</CardTitle>
-              <CardDescription>Replay saved queries instantly</CardDescription>
+              <CardTitle className="font-serif text-lg">{t.literature.pastSearches}</CardTitle>
+              <CardDescription>{t.literature.replay}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 pt-4">
               {searches.map((entry) => (

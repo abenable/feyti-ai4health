@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiFetch, apiJson, dossierApi } from "@/lib/api";
+import { useLanguage } from "@/lib/i18n";
 import type { ProductContext, RegIntelDashboard } from "@/lib/types";
 
 const inputClass = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100";
@@ -19,6 +20,7 @@ export default function RegulatoryIntelligencePage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [deadline, setDeadline] = useState({ title: "", due_date: "", product: "", authority: "" });
+  const { t } = useLanguage();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,8 +90,8 @@ export default function RegulatoryIntelligencePage() {
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-500 text-white"><Globe2 className="h-6 w-6" /></div>
             <div>
-              <h1 className="font-serif text-3xl font-bold leading-none">Regulatory Intelligence</h1>
-              <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">African authority monitoring</p>
+              <h1 className="font-serif text-3xl font-bold leading-none">{t.regintel.title}</h1>
+              <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{t.regintel.subtitle}</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -114,7 +116,7 @@ export default function RegulatoryIntelligencePage() {
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
           <Card className="xl:col-span-2">
-            <CardHeader className="border-b border-slate-100 pb-4"><CardTitle className="font-serif text-lg">Authority alerts</CardTitle><CardDescription>Detected regulatory documents and announcements</CardDescription></CardHeader>
+            <CardHeader className="border-b border-slate-100 pb-4"><CardTitle className="font-serif text-lg">{t.regintel.alerts}</CardTitle><CardDescription>Detected regulatory documents and announcements</CardDescription></CardHeader>
             <CardContent className="space-y-3 pt-4">
               {data?.alerts.length ? data.alerts.map(alert => (
                 <div key={alert.alert_id} className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -136,7 +138,7 @@ export default function RegulatoryIntelligencePage() {
           </Card>
 
           <Card>
-            <CardHeader className="border-b border-slate-100 pb-4"><CardTitle className="font-serif text-lg">Sources</CardTitle><CardDescription>Toggle and crawl authorities</CardDescription></CardHeader>
+            <CardHeader className="border-b border-slate-100 pb-4"><CardTitle className="font-serif text-lg">{t.regintel.sources}</CardTitle><CardDescription>Toggle and crawl authorities</CardDescription></CardHeader>
             <CardContent className="space-y-3 pt-4">
               {data?.sources.map(source => (
                 <div key={source.key} className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4">
@@ -154,7 +156,7 @@ export default function RegulatoryIntelligencePage() {
           </Card>
 
           <Card>
-            <CardHeader className="border-b border-slate-100 pb-4"><CardTitle className="font-serif text-lg">Changes</CardTitle><CardDescription>Document similarity between crawls</CardDescription></CardHeader>
+            <CardHeader className="border-b border-slate-100 pb-4"><CardTitle className="font-serif text-lg">{t.regintel.changes}</CardTitle><CardDescription>Document similarity between crawls</CardDescription></CardHeader>
             <CardContent className="space-y-3 pt-4">
               {data?.changes.length ? data.changes.map(change => (
                 <div key={`${change.url}-${change.detected_at}`} className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -166,14 +168,14 @@ export default function RegulatoryIntelligencePage() {
           </Card>
 
           <Card className="xl:col-span-2">
-            <CardHeader className="border-b border-slate-100 pb-4"><CardTitle className="font-serif text-lg">Compliance deadlines</CardTitle><CardDescription>Manual and crawled deadlines</CardDescription></CardHeader>
+            <CardHeader className="border-b border-slate-100 pb-4"><CardTitle className="font-serif text-lg">{t.regintel.deadlines}</CardTitle><CardDescription>Manual and crawled deadlines</CardDescription></CardHeader>
             <CardContent className="space-y-4 pt-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5 lg:items-end">
                 <label className="space-y-1.5"><span className="text-xs font-semibold text-slate-600">Title</span><input className={inputClass} value={deadline.title} onChange={e => setDeadline({ ...deadline, title: e.target.value })} /></label>
                 <label className="space-y-1.5"><span className="text-xs font-semibold text-slate-600">Due date</span><input type="date" className={inputClass} value={deadline.due_date} onChange={e => setDeadline({ ...deadline, due_date: e.target.value })} /></label>
                 <label className="space-y-1.5"><span className="text-xs font-semibold text-slate-600">Product</span><input className={inputClass} value={deadline.product} onChange={e => setDeadline({ ...deadline, product: e.target.value })} /></label>
                 <label className="space-y-1.5"><span className="text-xs font-semibold text-slate-600">Authority</span><input className={inputClass} value={deadline.authority} onChange={e => setDeadline({ ...deadline, authority: e.target.value })} /></label>
-                <Button onClick={addDeadline}><Plus className="h-4 w-4" />Add</Button>
+                <Button onClick={addDeadline}><Plus className="h-4 w-4" />{t.regintel.add}</Button>
               </div>
               <div className="space-y-2">
                 {data?.deadlines.length ? data.deadlines.map(item => (

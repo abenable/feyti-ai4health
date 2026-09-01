@@ -23,6 +23,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { apiFetch, dossierApi } from "@/lib/api";
+import { useLanguage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { ADRReport } from "@/lib/types";
 
@@ -52,6 +53,7 @@ export default function PVReportsPage() {
   const { dossierId } = useParams<{ dossierId: string }>();
   const [reports, setReports] = useState<ADRReport[]>([]);
   const [loading, setLoading] = useState(true);
+  const { t } = useLanguage();
 
   useEffect(() => {
     apiFetch<ADRReport[]>(dossierApi(dossierId, "/pv/reports"))
@@ -80,7 +82,7 @@ export default function PVReportsPage() {
                 <Activity className="h-6 w-6" />
               </div>
               <div>
-                <h1 className="font-serif text-3xl font-bold leading-none">Pharmacovigilance</h1>
+                <h1 className="font-serif text-3xl font-bold leading-none">{t.pv.title}</h1>
                 <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
                   ADR / ICSR reporting
                 </p>
