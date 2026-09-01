@@ -343,3 +343,82 @@ export interface GeneratedDoc {
   updated_at: string;
   feedback_count: number;
 }
+
+// ── Regulatory intelligence ─────────────────────────────────────────────────
+
+export interface RegIntelSource {
+  key: string;
+  country: string;
+  authority: string;
+  listing_urls: string[];
+  enabled: boolean;
+  last_crawled?: string | null;
+}
+
+export interface RegulatoryAlert {
+  alert_id: string;
+  source_key: string;
+  authority: string;
+  country: string;
+  title: string;
+  url: string;
+  doc_type: "regulation" | "guideline" | "circular" | "press_release" | "other";
+  published?: string | null;
+  detected_at: string;
+  impact_summary?: string | null;
+  related_products: string[];
+}
+
+export interface RegIntelChange {
+  url: string;
+  source_key: string;
+  old_hash: string;
+  new_hash: string;
+  similarity: number;
+  detected_at: string;
+  summary?: string | null;
+}
+
+export interface ComplianceDeadline {
+  deadline_id: string;
+  title: string;
+  due_date: string;
+  product?: string | null;
+  source: "manual" | "crawled";
+  authority?: string | null;
+}
+
+export interface RegIntelDashboard {
+  alerts: RegulatoryAlert[];
+  changes: RegIntelChange[];
+  deadlines: ComplianceDeadline[];
+  sources: RegIntelSource[];
+  stats: { new_this_week: number; pending_deadlines: number };
+}
+
+// ── Literature search ──────────────────────────────────────────────────────
+
+export interface LiteratureResult {
+  title: string;
+  url: string;
+  abstract: string;
+  source: string;
+  year: string;
+  doi: string;
+  relevance_score: number;
+  rank: number;
+  ai_ranked: boolean;
+}
+
+export interface LiteratureSearchEntry {
+  query: string;
+  count: number;
+  date: string;
+}
+
+export interface LiteratureSavedSearch {
+  query: string;
+  params: Record<string, unknown>;
+  saved_at: string;
+  results: LiteratureResult[];
+}

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { Activity, ArrowLeftRight, FolderTree, LayoutDashboard, MessageSquare, Wifi, WifiOff } from "lucide-react";
+import { Activity, ArrowLeftRight, BookOpen, FolderTree, Globe2, LayoutDashboard, MessageSquare, Wifi, WifiOff } from "lucide-react";
 
 import { apiFetch, getApiUrl } from "@/lib/api";
 import type { DossierSummary } from "@/lib/types";
@@ -53,6 +53,8 @@ export function Nav() {
         { href: `/d/${dossierId}`, label: "Dashboard", icon: LayoutDashboard },
         { href: `/d/${dossierId}/structure`, label: "Structure", icon: FolderTree },
         { href: `/d/${dossierId}/pv`, label: "PV / ADR", icon: Activity },
+        { href: `/d/${dossierId}/regintel`, label: "Reg Intel", icon: Globe2 },
+        { href: `/d/${dossierId}/literature`, label: "Literature", icon: BookOpen },
         { href: `/d/${dossierId}/chat`, label: "Chat", icon: MessageSquare },
       ]
     : [];
