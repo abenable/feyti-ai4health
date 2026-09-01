@@ -119,3 +119,52 @@ class ADRReport(BaseModel):
     nullification_reason: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class PVSourceRequest(BaseModel):
+    section_path: str
+    stem: str
+
+
+class PVPatientDraft(BaseModel):
+    identifier: Optional[str] = None
+    age: Optional[int] = None
+    age_group: Optional[str] = None
+    sex: Optional[str] = None
+    initials: Optional[str] = None
+    dob: Optional[date] = None
+
+
+class PVDrugDraft(BaseModel):
+    name: Optional[str] = None
+    batch_number: Optional[str] = None
+    dose_text: Optional[str] = None
+    route_of_administration: Optional[str] = None
+    indication: Optional[str] = None
+    action_taken: Optional[ActionLiteral] = None
+    therapy_start_date: Optional[date] = None
+    therapy_end_date: Optional[date] = None
+
+
+class PVReportDraft(BaseModel):
+    product_name: Optional[str] = None
+    patient: Optional[PVPatientDraft] = None
+    drug: Optional[PVDrugDraft] = None
+    reaction_meddra_term: Optional[str] = None
+    reaction_description: Optional[str] = None
+    reaction_start_date: Optional[date] = None
+    seriousness_criteria: list[str] = Field(default_factory=list)
+    is_serious: Optional[bool] = None
+    severity: Optional[SeverityLiteral] = None
+    causality: Optional[CausalityLiteral] = None
+    outcome: Optional[OutcomeLiteral] = None
+    reporter_name: Optional[str] = None
+    reporter_email: Optional[str] = None
+    reporter_phone: Optional[str] = None
+    reporter_organisation: Optional[str] = None
+    reporter_qualification: Optional[str] = None
+    reporter_country: Optional[str] = None
+    first_received_date: Optional[date] = None
+    worldwide_unique_id: Optional[str] = None
+    organization: Optional[str] = None
+    extraction_source: Literal["llm", "rules"] = "rules"

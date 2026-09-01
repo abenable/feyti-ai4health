@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
+from app.api.deps import require_dossier_root
 from app.core.config import settings
-from app.models.pv_schemas import ADRReport, MinimumCriteriaCheck
+from app.models.pv_schemas import ADRReport, MinimumCriteriaCheck, PVReportDraft, PVSourceRequest
 from app.services import store_utils
-from app.services import pv_e2b, pv_meddra, pv_minimum_criteria, pv_service
+from app.services.dossier_service import (
+    load_extracted_text,
+    read_meta,
+    resolve_document_paths,
+)
+from app.services import pv_extraction, pv_e2b, pv_meddra, pv_minimum_criteria, pv_service
 
 router = APIRouter()
 
@@ -23,6 +30,24 @@ def create_report(dossier_id: str, payload: dict):
 @router.get("/reports", response_model=List[ADRReport])
 def list_reports(dossier_id: str):
     return pv_service.list_reports(dossier_id)
+
+
+@router.post("/reports/extract", response_model=PVReportDraft)
+async def extract_report(dossier_id: str, request: PVSourceRequest, root: Path = Depends(require_dossier_root)):
+    try:
+        paths = resolve_document_paths(root, request.section_path, request.stem)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    meta = read_meta(paths["section_dir"], request.stem)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Source document metadata not found")
+
+    extracted_text = load_extracted_text(paths["section_dir"], meta)
+    if not extracted_text.strip():
+        raise HTTPException(status_code=422, detail="Source document has no extracted text")
+
+    return await pv_extraction.extract_report_fields(extracted_text, root)
 
 
 @router.get("/reports/{report_id}", response_model=ADRReport)
