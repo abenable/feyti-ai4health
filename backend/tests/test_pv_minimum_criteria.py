@@ -22,3 +22,13 @@ def test_missing_patient():
     missing = pv_minimum_criteria.missing_criteria(source)
     assert missing == ["patient"]
     assert "identifiable patient" in pv_minimum_criteria.describe_missing(source)
+
+
+def test_criteria_reads_nested_patient():
+    source = {
+        "patient": {"identifier": "PAT-1", "age": 30, "sex": "female"},
+        "reporter_name": "Dr Foo",
+        "product_name": "Aspirin",
+        "reaction_meddra_term": "Headache",
+    }
+    assert pv_minimum_criteria.is_valid_icsr(source)

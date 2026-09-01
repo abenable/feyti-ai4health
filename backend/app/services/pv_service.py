@@ -1,20 +1,14 @@
-"""Simple filesystem‑backed CRUD for ADR reports.
-
-Each dossier has a ``pv`` subdirectory. Reports are stored as JSON files named
-``<report_id>.json``. An ``index.json`` file holds a list of report identifiers
-to make enumeration cheap.
-"""
+"""Filesystem-backed CRUD for dossier-scoped ADR reports."""
 
 from __future__ import annotations
 
-import uuid
+from datetime import date, datetime
 from pathlib import Path
-from typing import List, Dict
+from typing import Dict, List
+from uuid import uuid4
 
-from app.services import store_utils
-from app.core.config import settings
 from app.models.pv_schemas import ADRReport
-from app.services import dossier_service
+from app.services import dossier_service, store_utils
 
 
 def _pv_root(dossier_id: str) -> Path:
@@ -29,7 +23,7 @@ def _ensure_root(dossier_id: str) -> Path:
 
 
 def _index_path(dossier_id: str) -> Path:
-    return _pv_root(dossier_id) / "index.json"
+    return store_utils.safe_join(_pv_root(dossier_id), "index.json")
 
 
 def _load_index(dossier_id: str) -> List[str]:
@@ -42,22 +36,23 @@ def _save_index(dossier_id: str, ids: List[str]) -> None:
 
 
 def create_report(dossier_id: str, data: Dict) -> ADRReport:
-    """Create a new report and persist it.
-
-    ``data`` is a dict that will be validated against :class:`ADRReport`.
-    The function generates a UUID ``report_id`` if one is not supplied.
-    """
-    pv_root = _ensure_root(dossier_id)
+    """Validate, enrich, and persist a new ADR report."""
+    _ensure_root(dossier_id)
     report = ADRReport(**data)
     if not report.report_id:
-        report.report_id = str(uuid.uuid4())
-    path = store_utils.safe_join(pv_root, f"{report.report_id}.json")
-    store_utils.write_json(path, report.model_dump())
-    # update index
-    idx = _load_index(dossier_id)
-    if report.report_id not in idx:
-        idx.append(report.report_id)
-        _save_index(dossier_id, idx)
+        report.report_id = uuid4().hex
+    if not report.worldwide_unique_id:
+        report.worldwide_unique_id = f"PM-{report.report_id.upper()}"
+    if not report.first_received_date:
+        report.first_received_date = date.today()
+
+    path = store_utils.safe_join(_pv_root(dossier_id), f"{report.report_id}.json")
+    store_utils.write_json(path, report.model_dump(mode="json"))
+
+    index = _load_index(dossier_id)
+    if report.report_id not in index:
+        index.append(report.report_id)
+        _save_index(dossier_id, index)
     return report
 
 
@@ -68,22 +63,22 @@ def get_report(dossier_id: str, report_id: str) -> ADRReport | None:
 
 
 def list_reports(dossier_id: str) -> List[ADRReport]:
-    ids = _load_index(dossier_id)
-    reports = []
-    for rid in ids:
-        rpt = get_report(dossier_id, rid)
-        if rpt:
-            reports.append(rpt)
-    return reports
+    reports = [report for report_id in _load_index(dossier_id)
+               if (report := get_report(dossier_id, report_id)) is not None]
+    return sorted(reports, key=lambda report: report.created_at, reverse=True)
 
 
 def update_report(dossier_id: str, report_id: str, updates: Dict) -> ADRReport | None:
     existing = get_report(dossier_id, report_id)
-    if not existing:
+    if existing is None:
         return None
-    updated_data = existing.model_dump()
+
+    updated_data = existing.model_dump(mode="json")
     updated_data.update(updates)
     updated = ADRReport(**updated_data)
+    updated.updated_at = datetime.utcnow()
+    updated.report_id = report_id
+
     path = store_utils.safe_join(_pv_root(dossier_id), f"{report_id}.json")
-    store_utils.write_json(path, updated.model_dump())
+    store_utils.write_json(path, updated.model_dump(mode="json"))
     return updated

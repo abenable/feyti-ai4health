@@ -38,7 +38,7 @@ def write_json(path: Path | str, data: Any) -> None:
     # Write to temporary file.
     tmp_path = p.with_name(p.name + ".tmp")
     with tmp_path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+        json.dump(data, f, indent=2, default=str)
         f.flush()
         os.fsync(f.fileno())
     # Atomic replace.

@@ -85,10 +85,34 @@ def _fmt_datetime(value) -> str:
 
 
 def _fmt_date(value) -> str:
+    if isinstance(value, str):
+        value = date.fromisoformat(value)
     return value.strftime("%Y%m%d")
 
 
+_PATIENT_FIELDS = ("identifier", "age", "age_group", "sex", "initials", "dob")
+_DRUG_FIELDS = (
+    "name", "batch_number", "dose_text", "route_of_administration", "indication",
+    "action_taken", "therapy_start_date", "therapy_end_date",
+)
+
+
+def _normalise_report(report: Dict) -> Dict:
+    """Flatten nested patient/drug objects for the ported E2B builder."""
+    normalised = dict(report)
+    patient = report.get("patient")
+    if isinstance(patient, dict):
+        for key in _PATIENT_FIELDS:
+            normalised.setdefault(f"patient_{key}", patient.get(key))
+    drug = report.get("drug")
+    if isinstance(drug, dict):
+        for key in _DRUG_FIELDS:
+            normalised.setdefault(key, drug.get(key))
+    return normalised
+
+
 def validate(report: Dict) -> List[str]:
+    report = _normalise_report(report)
     problems = []
     if not report.get("worldwide_unique_id"):
         problems.append(
@@ -139,6 +163,7 @@ def _value(parent, tag, code=None, text=None, null="NI"):
 
 
 def build_icsr(report: Dict, *, sender_id: str, receiver_id: str) -> str:
+    report = _normalise_report(report)
     problems = validate(report)
     if problems:
         raise E2BValidationError("This case cannot be sent as E2B(R3):\n  - " + "\n  - ".join(problems))
@@ -288,9 +313,9 @@ def _build_drug(patient, report):
         value.set('nullFlavor', 'NI')
         original = _sub(value, 'originalText')
         original.text = report['indication']
-    if report.get('action_taken_with_drug'):
+    if report.get('action_taken'):
         action = _sub(administration, 'outboundRelationship2', typeCode='PERT')
         observation = _sub(action, 'observation', classCode='OBS', moodCode='EVN')
         _sub(observation, 'code', code='31', codeSystem='2.16.840.1.113883.3.989.2.1.1.19')
-        _sub(observation, 'value', code=ACTION_TAKEN_CODES.get(report.get('action_taken_with_drug'), '0'), codeSystem='2.16.840.1.113883.3.989.2.1.1.15')
+        _sub(observation, 'value', code=ACTION_TAKEN_CODES.get(report.get('action_taken'), '0'), codeSystem='2.16.840.1.113883.3.989.2.1.1.15')
     # Challenge handling omitted for brevity.

@@ -63,6 +63,17 @@ def _present(value) -> bool:
 
 
 def _get(source: Dict, field: str):
+    """Read a criterion field, accepting the persisted nested report shape.
+
+    The public functions intentionally still speak in the flat field names used
+    by the ported deterministic logic. New reports store ``patient`` as an
+    object, so translate those fields at the boundary rather than duplicating
+    the criteria implementation.
+    """
+    if field.startswith("patient_"):
+        patient = source.get("patient")
+        if isinstance(patient, dict):
+            return patient.get(field[len("patient_"):])
     return source.get(field)
 
 

@@ -1,69 +1,80 @@
-"""MedDRA term suggestion service.
-
-The real implementation would ask an LLM to suggest a MedDRA PT code for a free‑
-text term. Here we provide a thin wrapper that caches results in
-``pv/meddra_cache.json`` under the dossier root. The cache is a dict mapping the
-original term to the LLM's JSON response.
-"""
+"""LLM-suggested, user-confirmed MedDRA coding with a per-dossier cache."""
 
 from __future__ import annotations
 
+import json
+from datetime import datetime
 from typing import Any, Dict
 
-from app.services import store_utils, llm
-from app.services import pv_service
+from app.models.pv_schemas import ADRReport, MedDRACoding
+from app.services import llm, pv_service, store_utils
 
 
 def _cache_path(dossier_id: str):
     return store_utils.safe_join(pv_service._pv_root(dossier_id), "meddra_cache.json")
 
 
-def suggest(term: str, dossier_id: str) -> Dict[str, Any]:
-    """Return a MedDRA suggestion for *term*.
+async def suggest(term: str, dossier_id: str) -> Dict[str, Any]:
+    """Suggest an unconfirmed MedDRA preferred term for *term*.
 
-    The function first checks ``meddra_cache.json``; if the term is cached the
-    stored result is returned. Otherwise the LLM is invoked and the result is
-    cached before being returned. The LLM is expected to return a JSON string
-    that can be parsed into a ``dict``.
+    Cached suggestions are returned without another LLM call. If the LLM is
+    unavailable or returns unusable JSON, the verbatim term is retained as the
+    name with no code rather than inventing a licensed MedDRA code.
     """
+    clean_term = term.strip()
     cache_file = _cache_path(dossier_id)
     cache = store_utils.read_json(cache_file) or {}
-    if term in cache:
-        return cache[term]
-    # Prompt is deliberately simple – tests monkey‑patch ``llm.generate_json``.
-    prompt = f"Suggest a MedDRA PT code for the term: {term!r}. Return JSON with keys 'pt_code' and 'pt_name'."
-    # ``generate_json`` is async; we run it synchronously for simplicity using
-    # ``asyncio.run`` – the function is only used in tests where the coroutine is
-    # patched with a sync stub.
-    import asyncio
+    cached = cache.get(clean_term)
+    if isinstance(cached, dict):
+        return {**cached, "source": "cache"}
 
-    raw = asyncio.run(llm.generate_json(prompt))
+    prompt = (
+        "Suggest one MedDRA preferred term for this adverse reaction verbatim. "
+        "Return JSON with keys pt_code, pt_name, and version. Use an empty "
+        "pt_code if you are not certain of the code; never invent a code. "
+        f"Reaction: {clean_term!r}"
+    )
     try:
-        import json
-
+        raw = await llm.generate_json(prompt)
         suggestion = json.loads(raw)
+        if not isinstance(suggestion, dict):
+            raise ValueError("MedDRA suggestion is not an object")
     except Exception:
-        suggestion = {"pt_code": None, "pt_name": None}
-    cache[term] = suggestion
+        suggestion = {"pt_code": "", "pt_name": clean_term, "version": None}
+
+    suggestion = {
+        "pt_code": str(suggestion.get("pt_code") or "").strip(),
+        "pt_name": str(suggestion.get("pt_name") or clean_term).strip(),
+        "version": suggestion.get("version"),
+        "source": "llm_suggestion",
+    }
+    cache[clean_term] = suggestion
     store_utils.write_json(cache_file, cache)
     return suggestion
 
 
-def confirm(report_id: str, dossier_id: str, term: str, source: str = "user_confirmed") -> None:
-    """Record that the user confirmed the MedDRA suggestion for a report.
-
-    The confirmation is stored on the report JSON under a ``meddra`` key.
-    """
-    report = pv_service.get_report(dossier_id, report_id)
-    if not report:
+async def confirm(report_id: str, dossier_id: str, term: str) -> ADRReport:
+    """Confirm a suggestion and persist it on the report reaction fields."""
+    if pv_service.get_report(dossier_id, report_id) is None:
         raise ValueError(f"Report {report_id} not found in dossier {dossier_id}")
-    suggestion = suggest(term, dossier_id)
-    # Update the report with the confirmed MedDRA data.
-    update = {
-        "meddra": {
-            "pt_code": suggestion.get("pt_code"),
-            "pt_name": suggestion.get("pt_name"),
-            "source": source,
-        }
-    }
-    pv_service.update_report(dossier_id, report_id, update)
+
+    suggestion = await suggest(term, dossier_id)
+    coding = MedDRACoding(
+        pt_code=str(suggestion.get("pt_code") or "").strip(),
+        pt_name=str(suggestion.get("pt_name") or term).strip(),
+        version=suggestion.get("version"),
+        source="user_confirmed",
+        confirmed_at=datetime.utcnow(),
+    )
+    updated = pv_service.update_report(
+        dossier_id,
+        report_id,
+        {
+            "reaction_pt_code": coding.pt_code or None,
+            "reaction_pt_name": coding.pt_name or None,
+            "meddra": coding.model_dump(mode="json"),
+        },
+    )
+    if updated is None:
+        raise ValueError(f"Report {report_id} not found in dossier {dossier_id}")
+    return updated
