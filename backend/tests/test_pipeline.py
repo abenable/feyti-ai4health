@@ -44,11 +44,14 @@ async def test_generate_json_strips_markdown_fence(monkeypatch):
     """Providers without native JSON mode (the self-hosted base model) can
     wrap the response in ```json ... ``` -- generate_json must still return
     clean JSON, for every caller (classification, extraction, ...)."""
+    from app.core.config import settings
     from app.services import llm
 
     async def fake_aicyclinder(prompt, max_tokens=None):
         return '```json\n{"section_path": "3.2.P.8.3", "confidence": 0.95}\n```'
 
+    # LiteLLM (the default) stays out of the way so the patched fallback runs.
+    monkeypatch.setattr(settings, "LITELLM_API_KEY", "")
     monkeypatch.setattr(llm, "_aicyclinder", fake_aicyclinder)
 
     raw = await llm.generate_json("prompt")
@@ -142,44 +145,46 @@ def test_file_into_dossier_rejects_path_traversal(tmp_path):
     assert ".." not in docs[0].section_path and "/" not in docs[0].filename
 
 
-async def test_llm_falls_back_aicyclinder_to_litellm_to_gemini(monkeypatch):
-    """Aicyclinder is tried first; only on failure does it try LiteLLM (if
-    configured), then Gemini."""
+async def test_llm_falls_back_litellm_to_aicyclinder_to_gemini(monkeypatch):
+    """LiteLLM is tried first; only on failure does it try the self-hosted
+    Aicyclinder box, then Gemini."""
     from app.core.config import settings
     from app.services import llm
 
-    async def failing_aicyclinder(prompt, max_tokens=None):
-        raise httpx.ConnectError("self-hosted box unreachable")
-
     async def failing_litellm(prompt, json_mode, max_tokens=None):
         raise httpx.HTTPStatusError("suspended", request=None, response=httpx.Response(429))
+
+    async def failing_aicyclinder(prompt, max_tokens=None):
+        raise httpx.ConnectError("self-hosted box unreachable")
 
     async def fake_gemini(prompt, json_mode, max_tokens=None):
         return "gemini response"
 
     monkeypatch.setattr(settings, "LITELLM_API_KEY", "test-key")
-    monkeypatch.setattr(llm, "_aicyclinder", failing_aicyclinder)
     monkeypatch.setattr(llm, "_litellm", failing_litellm)
+    monkeypatch.setattr(llm, "_aicyclinder", failing_aicyclinder)
     monkeypatch.setattr(llm, "_gemini", fake_gemini)
 
     result = await llm.generate_text("prompt")
     assert result == "gemini response"
 
 
-async def test_llm_prefers_aicyclinder_when_reachable(monkeypatch):
+async def test_llm_prefers_litellm_when_reachable(monkeypatch):
+    from app.core.config import settings
     from app.services import llm
 
-    async def fake_aicyclinder(prompt, max_tokens=None):
-        return "aicyclinder response"
+    async def fake_litellm(prompt, json_mode, max_tokens=None):
+        return "litellm response"
 
-    async def unreachable_litellm(*args, **kwargs):
-        raise AssertionError("should not fall back when aicyclinder succeeds")
+    async def unreachable_aicyclinder(*args, **kwargs):
+        raise AssertionError("should not fall back when litellm succeeds")
 
-    monkeypatch.setattr(llm, "_aicyclinder", fake_aicyclinder)
-    monkeypatch.setattr(llm, "_litellm", unreachable_litellm)
+    monkeypatch.setattr(settings, "LITELLM_API_KEY", "test-key")
+    monkeypatch.setattr(llm, "_litellm", fake_litellm)
+    monkeypatch.setattr(llm, "_aicyclinder", unreachable_aicyclinder)
 
     result = await llm.generate_text("prompt")
-    assert result == "aicyclinder response"
+    assert result == "litellm response"
 
 
 def test_tree_after_one_placement(tmp_path):

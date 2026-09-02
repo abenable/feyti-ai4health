@@ -1,11 +1,12 @@
 """Chat backends for the demo.
 
 Two providers, both surfaced as "Aicyclinder" to the user:
+  • "cloud"       → LiteLLM (kept internal; never named in the UI). The
+    default; requests to it that fail (proxy unreachable, HTTP error, key
+    not configured) fall back to "aicyclinder" automatically.
   • "aicyclinder" → the self-hosted base model (unsloth/Qwen3.8-27B, LoRA
     disabled server-side — the CTD-classifier adapter only emits section
-    codes, not conversation). The default; requests to it that fail
-    (box unreachable, HTTP error) fall back to "cloud" automatically.
-  • "cloud"       → LiteLLM (kept internal; never named in the UI).
+    codes, not conversation); its failures fall back to "cloud".
 """
 
 import logging
@@ -101,23 +102,34 @@ async def _chat_aicyclinder(req: ChatRequest, root: Path) -> ChatResponse:
 
 
 async def _chat_cloud(req: ChatRequest, root: Path) -> ChatResponse:
+    """LiteLLM chat — the default. Falls back to the self-hosted base model
+    when the proxy is unreachable or its key isn't configured."""
+    messages = _with_system_prompt(req, root)
+    if settings.LITELLM_API_KEY:
+        try:
+            text = await litellm_chat(
+                messages,
+                max_tokens=req.max_new_tokens,
+                temperature=req.temperature,
+            )
+            return ChatResponse(response=text)
+        except httpx.HTTPError as exc:
+            logger.warning("LiteLLM chat failed, falling back to Aicyclinder: %s", exc)
+
     try:
-        text = await litellm_chat(
-            _with_system_prompt(req, root),
+        text = await aicyclinder_chat(
+            messages,
             max_tokens=req.max_new_tokens,
             temperature=req.temperature,
         )
+        return ChatResponse(response=text)
     except httpx.HTTPError as exc:
         logger.error("Cloud chat provider error: %s", exc)
         raise HTTPException(status_code=502, detail="The Aicyclinder Cloud service returned an error.") from exc
-    except RuntimeError as exc:  # key not configured
-        logger.error("Cloud chat provider not configured: %s", exc)
-        raise HTTPException(status_code=503, detail="Aicyclinder Cloud is not available.") from exc
-    return ChatResponse(response=text)
 
 
 @router.get("/health")
-async def chat_health(dossier_id: str, provider: str = "aicyclinder"):
+async def chat_health(dossier_id: str, provider: str = "cloud"):
     """Report whether the selected backend is reachable (for the UI status badge).
     Provider health doesn't depend on dossier content; dossier_id is only here
     because it's part of this route's URL prefix."""

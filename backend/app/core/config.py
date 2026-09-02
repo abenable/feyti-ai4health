@@ -4,8 +4,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Feyti"
     API_V1_STR: str = "/api/v1"
-    # Text reasoning (classification) always tries Aicyclinder (self-hosted)
-    # first, falling back to LiteLLM then Gemini on error — see llm.py.
+    # Text reasoning (classification) always tries LiteLLM first, falling back
+    # to the self-hosted Aicyclinder box, then Gemini, on error — see llm.py.
     # OCR always uses Gemini (neither fallback offers vision).
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3.5-flash"

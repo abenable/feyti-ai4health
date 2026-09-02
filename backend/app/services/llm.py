@@ -1,5 +1,5 @@
-"""Provider-agnostic text LLM layer — self-hosted Aicyclinder is the default,
-LiteLLM and Gemini are fallbacks if it errors or is unreachable.
+"""Provider-agnostic text LLM layer — LiteLLM is the default; the self-hosted
+Aicyclinder box and Gemini are fallbacks if it errors or is unreachable.
 
 Used for text reasoning (document classification). OCR is NOT here: it needs
 vision, which neither LiteLLM nor Aicyclinder offer, so OCR stays on Gemini in
@@ -57,21 +57,23 @@ async def generate_text(prompt: str, max_tokens: int | None = None) -> str:
 
 
 async def _generate(prompt: str, json_mode: bool, max_tokens: int | None = None) -> str:
-    """Self-hosted first; LiteLLM, then Gemini, only on failure (unreachable box,
-    HTTP error, or the fallback's own key not configured)."""
+    """LiteLLM first; Aicyclinder, then Gemini, only on failure (unreachable
+    proxy, HTTP error, or a fallback's own key not configured)."""
     errors = []
-    try:
-        return await _aicyclinder(prompt, max_tokens=max_tokens)
-    except httpx.HTTPError as exc:
-        logger.warning("[llm] Aicyclinder unreachable, falling back to LiteLLM: %s", exc)
-        errors.append(f"aicyclinder: {exc}")
-
     if settings.LITELLM_API_KEY:
         try:
             return await _litellm(prompt, json_mode=json_mode, max_tokens=max_tokens)
         except httpx.HTTPError as exc:
-            logger.warning("[llm] LiteLLM failed, falling back to Gemini: %s", exc)
+            logger.warning("[llm] LiteLLM failed, falling back to Aicyclinder: %s", exc)
             errors.append(f"litellm: {exc}")
+    else:
+        errors.append("litellm: LITELLM_API_KEY not set")
+
+    try:
+        return await _aicyclinder(prompt, max_tokens=max_tokens)
+    except httpx.HTTPError as exc:
+        logger.warning("[llm] Aicyclinder unreachable, falling back to Gemini: %s", exc)
+        errors.append(f"aicyclinder: {exc}")
 
     try:
         return await _gemini(prompt, json_mode=json_mode, max_tokens=max_tokens)

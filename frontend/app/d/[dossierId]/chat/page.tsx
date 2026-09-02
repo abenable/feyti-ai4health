@@ -37,7 +37,7 @@ function ChatPageInner() {
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isModelOnline, setIsModelOnline] = useState<boolean | null>(null);
-  const [mode, setMode] = useState<Mode>("aicyclinder");
+  const [mode, setMode] = useState<Mode>("cloud");
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -125,13 +125,13 @@ function ChatPageInner() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Backend toggle — both modes are branded Aicyclinder. "Cloud" runs
-              on the fallback provider; never surfaced by name. */}
+          {/* Backend toggle — both modes are branded Aicyclinder. "Cloud" (the
+              default) runs on LiteLLM; never surfaced by name. */}
           <div className="flex items-center p-0.5 rounded-full bg-slate-100 border border-slate-200 shadow-inner">
             {(
               [
-                ["aicyclinder", t.chat.modeFineTuned],
                 ["cloud", t.chat.modeCloud],
+                ["aicyclinder", t.chat.modeFineTuned],
               ] as [Mode, string][]
             ).map(([value, label]) => (
               <button

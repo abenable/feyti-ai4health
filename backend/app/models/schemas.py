@@ -224,8 +224,8 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     max_new_tokens: int = 512
     temperature: float = 0.0
-    # "aicyclinder" = self-hosted base model; "cloud" = LiteLLM (kept internal).
-    provider: str = "aicyclinder"
+    # "cloud" = LiteLLM (kept internal); "aicyclinder" = self-hosted base model.
+    provider: str = "cloud"
     # Optional: when chat is opened from a document workspace, grounds the
     # assistant in that document's draft in addition to dossier-wide context.
     section_path: str | None = None

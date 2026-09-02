@@ -31,7 +31,7 @@ filesystem persistence with JSON sidecars.
   derives `(dossier_id, section_path, stem)`. All SQL goes through `app/services/db_repo.py`.
 - Legacy JSON sidecars were migrated by `scripts/migrate_sidecars_to_pg.py` (idempotent, re-runnable).
 - LLM calls go through `app/services/llm.py` only (`generate_json`, `generate_text`) —
-  Aicyclinder → LiteLLM → Gemini fallback chain. Never call providers directly from feature code.
+  LiteLLM → Aicyclinder → Gemini fallback chain. Never call providers directly from feature code.
 - Deterministic-first principle (from `specs/capability-buildout.md`): deterministic checks
   produce the numbers; the LLM only narrates, extracts, or translates. Every LLM feature must
   have a deterministic fallback and degrade gracefully when the LLM is unreachable.
