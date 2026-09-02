@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useLanguage } from "@/lib/i18n";
 import type { DossierTree } from "@/lib/types";
 
 function confidenceColor(confidence: number) {
@@ -37,6 +38,7 @@ export function DossierTreePanel({
   tree: DossierTree[] | null;
   flashName: string | null;
 }) {
+  const { t } = useLanguage();
   const totalDocs =
     tree?.reduce(
       (sum, moduleGroup) =>
@@ -69,17 +71,15 @@ export function DossierTreePanel({
       <CardHeader className="bg-slate-50/50 border-b border-slate-100/60 pb-5 px-6 sm:px-8 pt-6">
         <CardTitle className="text-xl font-serif text-slate-800 flex items-center gap-2">
           <Folder className="w-5 h-5 text-indigo-500" />
-          Live Dossier
+          {t.dossierTree.title}
         </CardTitle>
       </CardHeader>
       <CardContent className="p-6 sm:p-8">
         {totalDocs === 0 ? (
           <div className="text-center py-12 text-slate-500">
             <Folder className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-            <p className="font-medium">No documents filed yet.</p>
-            <p className="text-sm mt-1">
-              Upload a document to see your dossier grow.
-            </p>
+            <p className="font-medium">{t.dossierTree.empty}</p>
+            <p className="text-sm mt-1">{t.dossierTree.emptyHint}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -140,9 +140,10 @@ export function DossierTreePanel({
                                   className={`w-2 h-2 rounded-full ${confidenceColor(
                                     doc.confidence,
                                   )}`}
-                                  title={`${Math.round(
-                                    doc.confidence * 100,
-                                  )}% confidence`}
+                                  title={t.sectionDetail.confidencePct.replace(
+                                    "{pct}",
+                                    String(Math.round(doc.confidence * 100)),
+                                  )}
                                 />
                                 <span className="text-xs text-slate-400 tabular-nums hidden sm:inline">
                                   {formatDate(doc.uploaded_at)}

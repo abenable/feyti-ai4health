@@ -32,11 +32,11 @@ export default function RegulatoryIntelligencePage() {
       setData(dashboard);
       setContext(product);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load dashboard.");
+      toast.error(err instanceof Error ? err.message : t.regintel.loadFailedToast);
     } finally {
       setLoading(false);
     }
-  }, [dossierId]);
+  }, [dossierId, t]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -47,10 +47,10 @@ export default function RegulatoryIntelligencePage() {
         `/api/v1/regintelligence/crawl${sourceKey ? `?source_key=${encodeURIComponent(sourceKey)}` : ""}`,
         { method: "POST" }
       );
-      toast.success(`Crawl complete: ${result.new_alerts} alerts.`);
+      toast.success(t.regintel.crawlCompleteToast.replace("{count}", String(result.new_alerts)));
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Crawl failed.");
+      toast.error(err instanceof Error ? err.message : t.regintel.crawlFailedToast);
     } finally { setBusy(null); }
   };
 
@@ -58,7 +58,7 @@ export default function RegulatoryIntelligencePage() {
     try {
       await apiJson("/api/v1/regintelligence/sources", "POST", { source_key: key, enabled });
       setData(prev => prev ? { ...prev, sources: prev.sources.map(s => s.key === key ? { ...s, enabled } : s) } : prev);
-    } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to update source."); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : t.regintel.updateSourceFailedToast); }
   };
 
   const impact = async (alertId: string) => {
@@ -67,21 +67,21 @@ export default function RegulatoryIntelligencePage() {
       const product = context ? [context.product_name, context.market].filter(Boolean).join(" — ") || "the product" : "the product";
       const result = (await apiJson(`/api/v1/regintelligence/alerts/${alertId}/impact`, "POST", product)) as { impact_summary: string };
       setData(prev => prev ? { ...prev, alerts: prev.alerts.map(a => a.alert_id === alertId ? { ...a, impact_summary: result.impact_summary } : a) } : prev);
-    } catch (err) { toast.error(err instanceof Error ? err.message : "Impact analysis failed."); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : t.regintel.impactFailedToast); }
     finally { setBusy(null); }
   };
 
   const addDeadline = async () => {
-    if (!deadline.title.trim() || !deadline.due_date) { toast.error("Title and due date are required."); return; }
+    if (!deadline.title.trim() || !deadline.due_date) { toast.error(t.regintel.titleDueDateRequiredToast); return; }
     try {
       await apiJson("/api/v1/regintelligence/deadlines", "POST", { ...deadline, source: "manual", product: deadline.product || null, authority: deadline.authority || null });
       setDeadline({ title: "", due_date: "", product: "", authority: "" });
       await load();
-      toast.success("Deadline added.");
-    } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to add deadline."); }
+      toast.success(t.regintel.deadlineAddedToast);
+    } catch (err) { toast.error(err instanceof Error ? err.message : t.regintel.addDeadlineFailedToast); }
   };
 
-  if (loading && !data) return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500"><Loader2 className="mr-2 h-5 w-5 animate-spin" />Loading regulatory intelligence…</div>;
+  if (loading && !data) return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500"><Loader2 className="mr-2 h-5 w-5 animate-spin" />{t.regintel.loadingDashboard}</div>;
 
   return (
     <div className="min-h-screen bg-slate-50/60 px-6 py-8 text-slate-900">
@@ -95,17 +95,17 @@ export default function RegulatoryIntelligencePage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={load} disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Refresh</Button>
-            <Button onClick={() => crawl()} disabled={busy !== null}>{busy === "__all__" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}Crawl all</Button>
+            <Button variant="outline" onClick={load} disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}{t.regintel.refresh}</Button>
+            <Button onClick={() => crawl()} disabled={busy !== null}>{busy === "__all__" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}{t.regintel.crawlAll}</Button>
           </div>
         </header>
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
-            ["New this week", data?.stats.new_this_week ?? 0],
-            ["Pending deadlines", data?.stats.pending_deadlines ?? 0],
-            ["Sources", data?.sources.length ?? 0],
-            ["Changes", data?.changes.length ?? 0],
+            [t.regintel.statNewThisWeek, data?.stats.new_this_week ?? 0],
+            [t.regintel.statPendingDeadlines, data?.stats.pending_deadlines ?? 0],
+            [t.regintel.statSources, data?.sources.length ?? 0],
+            [t.regintel.statChanges, data?.changes.length ?? 0],
           ].map(([label, value]) => (
             <Card key={String(label)}><CardContent className="space-y-1 pt-0">
               <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
@@ -116,7 +116,7 @@ export default function RegulatoryIntelligencePage() {
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
           <Card className="xl:col-span-2">
-            <CardHeader className="border-b border-slate-100 pb-4"><CardTitle className="font-serif text-lg">{t.regintel.alerts}</CardTitle><CardDescription>Detected regulatory documents and announcements</CardDescription></CardHeader>
+            <CardHeader className="border-b border-slate-100 pb-4"><CardTitle className="font-serif text-lg">{t.regintel.alerts}</CardTitle><CardDescription>{t.regintel.alertsDesc}</CardDescription></CardHeader>
             <CardContent className="space-y-3 pt-4">
               {data?.alerts.length ? data.alerts.map(alert => (
                 <div key={alert.alert_id} className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -127,28 +127,28 @@ export default function RegulatoryIntelligencePage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline" className="capitalize">{alert.doc_type.replaceAll("_", " ")}</Badge>
-                      <Button size="sm" variant="outline" onClick={() => impact(alert.alert_id)} disabled={busy === alert.alert_id}>{busy === alert.alert_id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}Impact</Button>
+                      <Button size="sm" variant="outline" onClick={() => impact(alert.alert_id)} disabled={busy === alert.alert_id}>{busy === alert.alert_id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}{t.regintel.impact}</Button>
                       <a href={alert.url} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-indigo-600"><ExternalLink className="h-4 w-4" /></a>
                     </div>
                   </div>
                   {alert.impact_summary && <p className="mt-3 rounded-xl bg-indigo-50 p-3 text-sm text-indigo-900">{alert.impact_summary}</p>}
                 </div>
-              )) : <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">No alerts yet.</p>}
+              )) : <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">{t.regintel.noAlertsYet}</p>}
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="border-b border-slate-100 pb-4"><CardTitle className="font-serif text-lg">{t.regintel.sources}</CardTitle><CardDescription>Toggle and crawl authorities</CardDescription></CardHeader>
+            <CardHeader className="border-b border-slate-100 pb-4"><CardTitle className="font-serif text-lg">{t.regintel.sources}</CardTitle><CardDescription>{t.regintel.sourcesDesc}</CardDescription></CardHeader>
             <CardContent className="space-y-3 pt-4">
               {data?.sources.map(source => (
                 <div key={source.key} className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0"><p className="truncate font-semibold">{source.authority}</p><p className="text-xs text-slate-500">{source.country}</p></div>
-                    <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={source.enabled} onChange={e => toggleSource(source.key, e.target.checked)} className="h-4 w-4 accent-indigo-600" />Enabled</label>
+                    <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={source.enabled} onChange={e => toggleSource(source.key, e.target.checked)} className="h-4 w-4 accent-indigo-600" />{t.regintel.enabled}</label>
                   </div>
                   <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
-                    <span>Last crawl: {source.last_crawled ? new Date(source.last_crawled).toLocaleString() : "Never"}</span>
-                    <Button size="xs" variant="outline" onClick={() => crawl(source.key)} disabled={busy !== null}>{busy === source.key ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}Crawl</Button>
+                    <span>{t.regintel.lastCrawl.replace("{date}", source.last_crawled ? new Date(source.last_crawled).toLocaleString() : t.regintel.never)}</span>
+                    <Button size="xs" variant="outline" onClick={() => crawl(source.key)} disabled={busy !== null}>{busy === source.key ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}{t.regintel.crawl}</Button>
                   </div>
                 </div>
               ))}
@@ -156,34 +156,34 @@ export default function RegulatoryIntelligencePage() {
           </Card>
 
           <Card>
-            <CardHeader className="border-b border-slate-100 pb-4"><CardTitle className="font-serif text-lg">{t.regintel.changes}</CardTitle><CardDescription>Document similarity between crawls</CardDescription></CardHeader>
+            <CardHeader className="border-b border-slate-100 pb-4"><CardTitle className="font-serif text-lg">{t.regintel.changes}</CardTitle><CardDescription>{t.regintel.changesDesc}</CardDescription></CardHeader>
             <CardContent className="space-y-3 pt-4">
               {data?.changes.length ? data.changes.map(change => (
                 <div key={`${change.url}-${change.detected_at}`} className="rounded-2xl border border-slate-200 bg-white p-4">
                   <a href={change.url} target="_blank" rel="noreferrer" className="line-clamp-2 text-sm font-semibold hover:text-indigo-700">{change.url}</a>
-                  <div className="mt-2 flex items-center gap-2"><Badge variant="outline">{Math.round(change.similarity * 100)}% similar</Badge><span className="text-xs text-slate-500">{new Date(change.detected_at).toLocaleString()}</span></div>
+                  <div className="mt-2 flex items-center gap-2"><Badge variant="outline">{t.regintel.percentSimilar.replace("{pct}", String(Math.round(change.similarity * 100)))}</Badge><span className="text-xs text-slate-500">{new Date(change.detected_at).toLocaleString()}</span></div>
                 </div>
-              )) : <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">No changes detected.</p>}
+              )) : <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">{t.regintel.noChangesDetected}</p>}
             </CardContent>
           </Card>
 
           <Card className="xl:col-span-2">
-            <CardHeader className="border-b border-slate-100 pb-4"><CardTitle className="font-serif text-lg">{t.regintel.deadlines}</CardTitle><CardDescription>Manual and crawled deadlines</CardDescription></CardHeader>
+            <CardHeader className="border-b border-slate-100 pb-4"><CardTitle className="font-serif text-lg">{t.regintel.deadlines}</CardTitle><CardDescription>{t.regintel.deadlinesDesc}</CardDescription></CardHeader>
             <CardContent className="space-y-4 pt-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5 lg:items-end">
-                <label className="space-y-1.5"><span className="text-xs font-semibold text-slate-600">Title</span><input className={inputClass} value={deadline.title} onChange={e => setDeadline({ ...deadline, title: e.target.value })} /></label>
-                <label className="space-y-1.5"><span className="text-xs font-semibold text-slate-600">Due date</span><input type="date" className={inputClass} value={deadline.due_date} onChange={e => setDeadline({ ...deadline, due_date: e.target.value })} /></label>
-                <label className="space-y-1.5"><span className="text-xs font-semibold text-slate-600">Product</span><input className={inputClass} value={deadline.product} onChange={e => setDeadline({ ...deadline, product: e.target.value })} /></label>
-                <label className="space-y-1.5"><span className="text-xs font-semibold text-slate-600">Authority</span><input className={inputClass} value={deadline.authority} onChange={e => setDeadline({ ...deadline, authority: e.target.value })} /></label>
+                <label className="space-y-1.5"><span className="text-xs font-semibold text-slate-600">{t.regintel.titleField}</span><input className={inputClass} value={deadline.title} onChange={e => setDeadline({ ...deadline, title: e.target.value })} /></label>
+                <label className="space-y-1.5"><span className="text-xs font-semibold text-slate-600">{t.regintel.dueDate}</span><input type="date" className={inputClass} value={deadline.due_date} onChange={e => setDeadline({ ...deadline, due_date: e.target.value })} /></label>
+                <label className="space-y-1.5"><span className="text-xs font-semibold text-slate-600">{t.regintel.productField}</span><input className={inputClass} value={deadline.product} onChange={e => setDeadline({ ...deadline, product: e.target.value })} /></label>
+                <label className="space-y-1.5"><span className="text-xs font-semibold text-slate-600">{t.regintel.authorityField}</span><input className={inputClass} value={deadline.authority} onChange={e => setDeadline({ ...deadline, authority: e.target.value })} /></label>
                 <Button onClick={addDeadline}><Plus className="h-4 w-4" />{t.regintel.add}</Button>
               </div>
               <div className="space-y-2">
                 {data?.deadlines.length ? data.deadlines.map(item => (
                   <div key={item.deadline_id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm">
-                    <div className="min-w-0"><p className="truncate font-semibold">{item.title}</p><p className="text-xs text-slate-500">{item.authority || "Manual"} · {item.product || "All products"}</p></div>
+                    <div className="min-w-0"><p className="truncate font-semibold">{item.title}</p><p className="text-xs text-slate-500">{item.authority || t.regintel.manual} · {item.product || t.regintel.allProducts}</p></div>
                     <Badge variant="outline" className="shrink-0"><CalendarClock className="h-3 w-3" />{new Date(item.due_date).toLocaleDateString()}</Badge>
                   </div>
-                )) : <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">No deadlines configured.</p>}
+                )) : <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">{t.regintel.noDeadlinesConfigured}</p>}
               </div>
             </CardContent>
           </Card>

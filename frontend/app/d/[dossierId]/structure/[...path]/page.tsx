@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { apiFetch, apiJson, dossierApi, downloadFromApi, sectionPathFromSegments, workspaceHref } from "@/lib/api";
+import { useLanguage, type Dictionary } from "@/lib/i18n";
 import type {
   DocumentDetail,
   ExtractedField,
@@ -42,12 +43,14 @@ import type {
 const TABS = ["source", "analysis", "draft", "validation"] as const;
 type Tab = (typeof TABS)[number];
 
-const TAB_META: Record<Tab, { label: string; icon: typeof ScanText }> = {
-  source: { label: "Source", icon: ScanText },
-  analysis: { label: "Analysis", icon: Tags },
-  draft: { label: "Draft", icon: FileText },
-  validation: { label: "Validation", icon: CheckCircle2 },
-};
+function tabMeta(t: Dictionary): Record<Tab, { label: string; icon: typeof ScanText }> {
+  return {
+    source: { label: t.sectionDetail.tabSource, icon: ScanText },
+    analysis: { label: t.sectionDetail.tabAnalysis, icon: Tags },
+    draft: { label: t.sectionDetail.tabDraft, icon: FileText },
+    validation: { label: t.sectionDetail.tabValidation, icon: CheckCircle2 },
+  };
+}
 
 function statusClasses(status: string) {
   switch (status) {
@@ -59,11 +62,17 @@ function statusClasses(status: string) {
       return "bg-slate-100 text-slate-700 border-slate-200";
   }
 }
+function docStatusLabel(t: Dictionary, status: string): string {
+  return { approved: t.structurePage.statusApproved, edited: t.structurePage.statusEdited, draft: t.structurePage.statusDraft }[status] ?? status;
+}
 
 function DocumentWorkspacePageInner() {
   const params = useParams<{ dossierId: string; path: string[] }>();
   const searchParams = useSearchParams();
   const router = useRouter();
+
+  const { t } = useLanguage();
+  const TAB_META = tabMeta(t);
 
   const dossierId = params.dossierId;
   const sectionPath = useMemo(() => sectionPathFromSegments(params.path ?? []), [params.path]);
@@ -104,12 +113,12 @@ function DocumentWorkspacePageInner() {
       setEditMarkdown(data.markdown);
       setFields(data.meta.fields ?? []);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load document.");
+      toast.error(err instanceof Error ? err.message : t.sectionDetail.loadDocumentFailedToast);
       setDetail(null);
     } finally {
       setLoading(false);
     }
-  }, [dossierId, sectionPath, stem]);
+  }, [dossierId, sectionPath, stem, t]);
 
   useEffect(() => {
     loadDocument();
@@ -125,11 +134,11 @@ function DocumentWorkspacePageInner() {
         ),
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load source.");
+      toast.error(err instanceof Error ? err.message : t.sectionDetail.loadSourceFailedToast);
     } finally {
       setSourceLoading(false);
     }
-  }, [dossierId, sectionPath, stem, source, sourceLoading]);
+  }, [dossierId, sectionPath, stem, source, sourceLoading, t]);
 
   const loadCatalogue = useCallback(async () => {
     if (catalogue.length) return;
@@ -150,11 +159,11 @@ function DocumentWorkspacePageInner() {
         ),
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to validate document.");
+      toast.error(err instanceof Error ? err.message : t.sectionDetail.validateFailedToast);
     } finally {
       setValidationLoading(false);
     }
-  }, [dossierId, sectionPath, stem]);
+  }, [dossierId, sectionPath, stem, t]);
 
   useEffect(() => {
     if (tab === "source") loadSource();
@@ -164,8 +173,7 @@ function DocumentWorkspacePageInner() {
   }, [tab]);
 
   const confirmRevertIfApproved = () =>
-    detail?.status !== "approved" ||
-    window.confirm("This document is approved. Regenerating it will revert it to draft. Continue?");
+    detail?.status !== "approved" || window.confirm(t.sectionDetail.revertConfirm);
 
   const applyRegenerated = (data: GenerateResult) => {
     setDetail((prev) => (prev ? { ...prev, markdown: data.markdown, status: data.status } : prev));
@@ -180,9 +188,9 @@ function DocumentWorkspacePageInner() {
       setDetail((prev) => (prev ? { ...prev, markdown: editMarkdown, status: "edited" } : prev));
       setValidation(null);
       setIsEditing(false);
-      toast.success("Changes saved.");
+      toast.success(t.sectionDetail.changesSavedToast);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save changes.");
+      toast.error(err instanceof Error ? err.message : t.sectionDetail.saveFailedToast);
     } finally {
       setIsSaving(false);
     }
@@ -199,9 +207,9 @@ function DocumentWorkspacePageInner() {
       }) as GenerateResult;
       applyRegenerated(data);
       setFeedback("");
-      toast.success("Document regenerated.");
+      toast.success(t.sectionDetail.regeneratedToast);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to regenerate.");
+      toast.error(err instanceof Error ? err.message : t.sectionDetail.regenerateFailedToast);
     } finally {
       setIsRegenerating(false);
     }
@@ -217,9 +225,9 @@ function DocumentWorkspacePageInner() {
         augment: true,
       }) as GenerateResult;
       applyRegenerated(data);
-      toast.success("Document augmented — review the ⚠️ gaps before approving.");
+      toast.success(t.sectionDetail.augmentedToast);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to augment.");
+      toast.error(err instanceof Error ? err.message : t.sectionDetail.augmentFailedToast);
     } finally {
       setIsAugmenting(false);
     }
@@ -230,9 +238,9 @@ function DocumentWorkspacePageInner() {
     try {
       await apiJson(dossierApi(dossierId, "/approve"), "POST", { section_path: sectionPath, stem });
       setDetail((prev) => (prev ? { ...prev, status: "approved" } : prev));
-      toast.success("Document approved.");
+      toast.success(t.sectionDetail.approvedToast);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to approve.");
+      toast.error(err instanceof Error ? err.message : t.sectionDetail.approveFailedToast);
     } finally {
       setIsApproving(false);
     }
@@ -245,7 +253,7 @@ function DocumentWorkspacePageInner() {
         `${stem}.docx`,
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to download document.");
+      toast.error(err instanceof Error ? err.message : t.sectionDetail.downloadFailedToast);
     }
   };
 
@@ -253,9 +261,9 @@ function DocumentWorkspacePageInner() {
     setReExtracting(true);
     try {
       setFields(await apiJson(dossierApi(dossierId, "/extract"), "POST", { section_path: sectionPath, stem }) as ExtractedField[]);
-      toast.success("Fields re-extracted.");
+      toast.success(t.sectionDetail.fieldsReExtractedToast);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to extract fields.");
+      toast.error(err instanceof Error ? err.message : t.sectionDetail.extractFailedToast);
     } finally {
       setReExtracting(false);
     }
@@ -271,10 +279,10 @@ function DocumentWorkspacePageInner() {
         stem,
         ctd_path: ctdPath,
       }) as ReclassifyResponse;
-      toast.success(`Moved to ${ctdPath}.`);
+      toast.success(t.sectionDetail.movedToToast.replace("{path}", ctdPath));
       router.replace(workspaceHref(dossierId, data.section_path, data.stem));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to reclassify.");
+      toast.error(err instanceof Error ? err.message : t.sectionDetail.reclassifyFailedToast);
     } finally {
       setReclassifying(false);
     }
@@ -299,7 +307,7 @@ function DocumentWorkspacePageInner() {
               </h1>
               {detail && (
                 <Badge variant="outline" className={`text-[10px] px-2 py-0.5 rounded-full capitalize shrink-0 ${statusClasses(detail.status)}`}>
-                  {detail.status}
+                  {docStatusLabel(t, detail.status)}
                 </Badge>
               )}
             </div>
@@ -311,20 +319,20 @@ function DocumentWorkspacePageInner() {
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider border border-indigo-200 bg-indigo-50 text-indigo-700 shadow-sm hover:bg-indigo-100 transition-colors shrink-0"
         >
           <MessageSquare className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Ask about this</span>
+          <span className="hidden sm:inline">{t.sectionDetail.askAboutThis}</span>
         </Link>
       </header>
 
       <div className="w-full max-w-5xl mx-auto px-6">
         <div className="flex items-center gap-1 border-b border-slate-200/60 mb-6">
-          {TABS.map((t) => {
-            const { label, icon: Icon } = TAB_META[t];
+          {TABS.map((tabId) => {
+            const { label, icon: Icon } = TAB_META[tabId];
             return (
               <button
-                key={t}
-                onClick={() => setTab(t)}
+                key={tabId}
+                onClick={() => setTab(tabId)}
                 className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                  tab === t ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-500 hover:text-slate-800"
+                  tab === tabId ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-500 hover:text-slate-800"
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -339,19 +347,23 @@ function DocumentWorkspacePageInner() {
         {loading ? (
           <div className="flex items-center justify-center h-64 text-slate-500">
             <Loader2 className="w-5 h-5 animate-spin mr-2" />
-            Loading document...
+            {t.sectionDetail.loadingDocument}
           </div>
         ) : !detail ? (
-          <div className="flex items-center justify-center h-64 text-slate-500">Document not found.</div>
+          <div className="flex items-center justify-center h-64 text-slate-500">{t.sectionDetail.documentNotFound}</div>
         ) : (
           <>
             {tab === "source" && (
               <Card className="border-slate-200/60 shadow-lg rounded-3xl overflow-hidden">
                 <CardHeader className="bg-slate-50/50 border-b border-slate-100/60 flex flex-row items-center justify-between gap-3">
                   <div>
-                    <h2 className="font-serif text-lg text-slate-800">Source</h2>
+                    <h2 className="font-serif text-lg text-slate-800">{t.sectionDetail.tabSource}</h2>
                     <p className="text-xs text-slate-500">
-                      {source ? `${source.pages.length} page(s) · ${source.extracted_chars.toLocaleString()} chars` : "Extracted text, page by page"}
+                      {source
+                        ? t.sectionDetail.sourceSubtitlePages
+                            .replace("{pages}", String(source.pages.length))
+                            .replace("{chars}", source.extracted_chars.toLocaleString())
+                        : t.sectionDetail.sourceSubtitleEmpty}
                     </p>
                   </div>
                   {meta.filename && (
@@ -362,11 +374,11 @@ function DocumentWorkspacePageInner() {
                         downloadFromApi(
                           dossierApi(dossierId, `/original?section_path=${encodeURIComponent(sectionPath)}&stem=${encodeURIComponent(stem)}`),
                           meta.filename!,
-                        ).catch((err) => toast.error(err instanceof Error ? err.message : "Failed to download original."))
+                        ).catch((err) => toast.error(err instanceof Error ? err.message : t.sectionDetail.downloadOriginalFailedToast))
                       }
                     >
                       <Download className="w-4 h-4" />
-                      Original file
+                      {t.sectionDetail.originalFile}
                     </Button>
                   )}
                 </CardHeader>
@@ -374,24 +386,24 @@ function DocumentWorkspacePageInner() {
                   {sourceLoading ? (
                     <div className="flex items-center justify-center h-40 text-slate-500">
                       <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                      Loading source...
+                      {t.sectionDetail.loadingSource}
                     </div>
                   ) : !source || source.pages.length === 0 ? (
-                    <div className="text-center py-16 text-slate-500 text-sm">No extracted source text (authored section).</div>
+                    <div className="text-center py-16 text-slate-500 text-sm">{t.sectionDetail.noSourceText}</div>
                   ) : (
                     <div className="divide-y divide-slate-100">
                       {source.pages.map((p) => (
                         <details key={p.page} open={source.pages.length <= 3} className="group">
                           <summary className="flex items-center gap-2 cursor-pointer list-none select-none px-6 py-3 hover:bg-slate-50">
-                            <span className="text-sm font-semibold text-slate-700">Page {p.page}</span>
+                            <span className="text-sm font-semibold text-slate-700">{t.sectionDetail.page.replace("{n}", String(p.page))}</span>
                             {p.is_ocr && (
                               <Badge variant="outline" className="text-[9px] px-1.5 py-0 rounded-full bg-violet-50 border-violet-200 text-violet-700">
-                                OCR
+                                {t.dossier.ocr}
                               </Badge>
                             )}
                           </summary>
                           <div className="px-6 pb-4 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-                            {p.text || <span className="text-slate-400 italic">(no text on this page)</span>}
+                            {p.text || <span className="text-slate-400 italic">{t.sectionDetail.noTextOnPage}</span>}
                           </div>
                         </details>
                       ))}
@@ -405,7 +417,7 @@ function DocumentWorkspacePageInner() {
               <div className="space-y-6">
                 <Card className="border-slate-200/60 shadow-lg rounded-3xl overflow-hidden">
                   <CardHeader className="bg-slate-50/50 border-b border-slate-100/60">
-                    <h2 className="font-serif text-lg text-slate-800">Classification</h2>
+                    <h2 className="font-serif text-lg text-slate-800">{t.sectionDetail.classification}</h2>
                   </CardHeader>
                   <CardContent className="p-6 space-y-4">
                     <div className="flex flex-wrap items-center gap-3">
@@ -413,19 +425,19 @@ function DocumentWorkspacePageInner() {
                         {meta.section_path} {meta.title}
                       </Badge>
                       <span className="text-sm text-slate-500">
-                        {Math.round((meta.confidence ?? 0) * 100)}% confidence
+                        {t.sectionDetail.confidencePct.replace("{pct}", String(Math.round((meta.confidence ?? 0) * 100)))}
                       </span>
                     </div>
                     {meta.justification && <p className="text-sm text-slate-600 leading-relaxed">{meta.justification}</p>}
                     {meta.summary && (
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Summary</p>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">{t.dossier.summary}</p>
                         <p className="text-sm text-slate-700 leading-relaxed">{meta.summary}</p>
                       </div>
                     )}
                     {meta.key_points && meta.key_points.length > 0 && (
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Key Points</p>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">{t.dossier.keyPoints}</p>
                         <ul className="space-y-1.5">
                           {meta.key_points.map((point, i) => (
                             <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
@@ -438,14 +450,14 @@ function DocumentWorkspacePageInner() {
                     )}
 
                     <div className="border-t border-slate-100 pt-4">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Wrong section? Reclassify</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">{t.sectionDetail.reclassifyLabel}</p>
                       <div className="flex gap-2">
                         <input
                           list="ctd-catalogue"
                           value={reclassifyPath}
                           onChange={(e) => setReclassifyPath(e.target.value)}
                           onFocus={loadCatalogue}
-                          placeholder="e.g. 3.2.P.8.3 Stability Data"
+                          placeholder={t.sectionDetail.reclassifyPlaceholder}
                           className="flex-1 h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
                         />
                         <datalist id="ctd-catalogue">
@@ -454,7 +466,7 @@ function DocumentWorkspacePageInner() {
                           ))}
                         </datalist>
                         <Button size="sm" variant="outline" onClick={reclassify} disabled={reclassifying || !reclassifyPath.trim()}>
-                          {reclassifying ? <Loader2 className="w-4 h-4 animate-spin" /> : "Move"}
+                          {reclassifying ? <Loader2 className="w-4 h-4 animate-spin" /> : t.sectionDetail.move}
                         </Button>
                       </div>
                     </div>
@@ -463,15 +475,15 @@ function DocumentWorkspacePageInner() {
 
                 <Card className="border-slate-200/60 shadow-lg rounded-3xl overflow-hidden">
                   <CardHeader className="bg-slate-50/50 border-b border-slate-100/60 flex flex-row items-center justify-between gap-3">
-                    <h2 className="font-serif text-lg text-slate-800">Extracted Fields</h2>
+                    <h2 className="font-serif text-lg text-slate-800">{t.sectionDetail.extractedFields}</h2>
                     <Button size="sm" variant="outline" onClick={reExtractFields} disabled={reExtracting}>
                       {reExtracting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                      Re-extract
+                      {t.sectionDetail.reExtract}
                     </Button>
                   </CardHeader>
                   <CardContent className="p-0">
                     {fields.length === 0 ? (
-                      <div className="text-center py-10 text-slate-500 text-sm">No structured fields extracted yet.</div>
+                      <div className="text-center py-10 text-slate-500 text-sm">{t.sectionDetail.noFieldsExtracted}</div>
                     ) : (
                       <table className="w-full text-sm">
                         <tbody className="divide-y divide-slate-100">
@@ -483,7 +495,7 @@ function DocumentWorkspacePageInner() {
                                   f.value
                                 ) : (
                                   <span className="text-amber-600 italic flex items-center gap-1">
-                                    <AlertTriangle className="w-3.5 h-3.5" /> not found in source
+                                    <AlertTriangle className="w-3.5 h-3.5" /> {t.sectionDetail.notFoundInSource}
                                   </span>
                                 )}
                               </td>
@@ -508,17 +520,17 @@ function DocumentWorkspacePageInner() {
                       <motion.div key="actions" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 flex-wrap">
                         <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
                           <Edit3 className="w-4 h-4" />
-                          <span className="hidden sm:inline">Edit</span>
+                          <span className="hidden sm:inline">{t.dossier.edit}</span>
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={augmentDocument}
                           disabled={isAugmenting}
-                          title="Expand sparse content into a complete section; missing data is marked ⚠️ TO BE PROVIDED, never invented."
+                          title={t.sectionDetail.augmentTooltip}
                         >
                           {isAugmenting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                          <span className="hidden sm:inline">Augment</span>
+                          <span className="hidden sm:inline">{t.sectionDetail.augment}</span>
                         </Button>
                         <Button
                           variant={detail.status === "approved" ? "secondary" : "default"}
@@ -527,11 +539,11 @@ function DocumentWorkspacePageInner() {
                           disabled={isApproving || detail.status === "approved"}
                         >
                           {isApproving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                          <span className="hidden sm:inline">{detail.status === "approved" ? "Approved" : "Approve"}</span>
+                          <span className="hidden sm:inline">{detail.status === "approved" ? t.sectionDetail.approved : t.sectionDetail.approve}</span>
                         </Button>
                         <Button variant="outline" size="sm" onClick={downloadDocx}>
                           <Download className="w-4 h-4" />
-                          <span className="hidden sm:inline">DOCX</span>
+                          <span className="hidden sm:inline">{t.sectionDetail.docx}</span>
                         </Button>
                       </motion.div>
                     ) : (
@@ -545,11 +557,11 @@ function DocumentWorkspacePageInner() {
                           }}
                         >
                           <X className="w-4 h-4" />
-                          Cancel
+                          {t.dossier.cancel}
                         </Button>
                         <Button size="sm" onClick={saveEdit} disabled={isSaving}>
                           {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                          Save
+                          {t.pv.save}
                         </Button>
                       </motion.div>
                     )}
@@ -570,7 +582,7 @@ function DocumentWorkspacePageInner() {
                     ) : (
                       <motion.div key="preview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-6 sm:p-8">
                         <div className="prose prose-sm prose-slate prose-headings:font-serif prose-p:leading-relaxed prose-pre:bg-slate-900 max-w-none">
-                          <ReactMarkdown>{detail.markdown || "*(No content)*"}</ReactMarkdown>
+                          <ReactMarkdown>{detail.markdown || t.sectionDetail.noContent}</ReactMarkdown>
                         </div>
                       </motion.div>
                     )}
@@ -581,7 +593,7 @@ function DocumentWorkspacePageInner() {
                   <div className="border-t border-slate-100 bg-slate-50/50 p-4">
                     <div className="flex items-end gap-3">
                       <div className="flex-1">
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">AI Feedback</label>
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">{t.sectionDetail.aiFeedback}</label>
                         <input
                           type="text"
                           value={feedback}
@@ -592,13 +604,13 @@ function DocumentWorkspacePageInner() {
                               submitFeedback();
                             }
                           }}
-                          placeholder="Tell the AI what to change..."
+                          placeholder={t.sectionDetail.feedbackPlaceholder}
                           className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
                         />
                       </div>
                       <Button onClick={submitFeedback} disabled={isRegenerating || !feedback.trim()}>
                         {isRegenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                        Regenerate
+                        {t.sectionDetail.regenerate}
                       </Button>
                     </div>
                   </div>
@@ -610,36 +622,37 @@ function DocumentWorkspacePageInner() {
               <Card className="border-slate-200/60 shadow-lg rounded-3xl overflow-hidden">
                 <CardHeader className="bg-slate-50/50 border-b border-slate-100/60 flex flex-row items-center justify-between gap-4">
                   <div>
-                    <h2 className="font-serif text-lg text-slate-800">Output Validation</h2>
-                    <p className="text-xs text-slate-500">Checks must pass before this document can be approved</p>
+                    <h2 className="font-serif text-lg text-slate-800">{t.sectionDetail.outputValidation}</h2>
+                    <p className="text-xs text-slate-500">{t.sectionDetail.validationSubtitle}</p>
                   </div>
                   <Button size="sm" variant="outline" onClick={loadValidation} disabled={validationLoading}>
                     {validationLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    Re-run
+                    {t.sectionDetail.reRun}
                   </Button>
                 </CardHeader>
                 <CardContent className="p-6 space-y-6">
                   {validationLoading && !validation ? (
                     <div className="flex items-center justify-center h-32 text-slate-500">
                       <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                      Validating...
+                      {t.sectionDetail.validating}
                     </div>
                   ) : !validation ? (
-                    <div className="text-center py-10 text-slate-500 text-sm">No validation run yet.</div>
+                    <div className="text-center py-10 text-slate-500 text-sm">{t.sectionDetail.noValidationRun}</div>
                   ) : (
                     <>
                       <div className="flex items-center gap-4">
                         <div className="text-3xl font-bold font-serif text-slate-800">{validation.score}%</div>
                         <div className="text-sm text-slate-500">
-                          {validation.checks.filter((c) => c.level === "error").length} error(s) ·{" "}
-                          {validation.checks.filter((c) => c.level === "warn").length} warning(s) ·{" "}
-                          {validation.open_gaps} open gap(s)
+                          {t.sectionDetail.errorsWarningsGaps
+                            .replace("{errors}", String(validation.checks.filter((c) => c.level === "error").length))
+                            .replace("{warnings}", String(validation.checks.filter((c) => c.level === "warn").length))
+                            .replace("{gaps}", String(validation.open_gaps))}
                         </div>
                       </div>
 
                       {validation.checks.length === 0 ? (
                         <div className="flex items-center gap-2 text-emerald-700 text-sm font-medium">
-                          <CheckCircle2 className="w-4 h-4" /> All checks passed.
+                          <CheckCircle2 className="w-4 h-4" /> {t.sectionDetail.allChecksPassed}
                         </div>
                       ) : (
                         <ul className="space-y-2">
@@ -652,7 +665,7 @@ function DocumentWorkspacePageInner() {
                               )}
                               <span className="text-slate-700">
                                 {c.message}
-                                {c.line && <span className="text-slate-400"> (line {c.line})</span>}
+                                {c.line && <span className="text-slate-400"> {t.sectionDetail.lineN.replace("{n}", String(c.line))}</span>}
                               </span>
                             </li>
                           ))}

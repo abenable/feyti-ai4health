@@ -66,7 +66,7 @@ export default function NewPVReportPage() {
 
   const extractFromSource = async () => {
     if (!selectedDoc) {
-      toast.error("Select a source document first.");
+      toast.error(t.pv.selectSourceFirstToast);
       return;
     }
     setExtracting(true);
@@ -78,13 +78,9 @@ export default function NewPVReportPage() {
       )) as PVReportDraft;
       setForm((prev) => applyPVReportDraft(prev, draft));
       setExtractionSource(draft.extraction_source);
-      toast.success(
-        draft.extraction_source === "llm"
-          ? "Extracted with AI — review every field before saving."
-          : "Used deterministic label extraction — review every field."
-      );
+      toast.success(draft.extraction_source === "llm" ? t.pv.extractedAiToast : t.pv.extractedRulesToast);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Source extraction failed.");
+      toast.error(err instanceof Error ? err.message : t.pv.extractionFailedToast);
     } finally {
       setExtracting(false);
     }
@@ -94,10 +90,10 @@ export default function NewPVReportPage() {
     setSaving(true);
     try {
       const saved = (await apiJson(dossierApi(dossierId, "/pv/reports"), "POST", form)) as ADRReport;
-      toast.success("ADR report created.");
+      toast.success(t.pv.reportCreatedToast);
       router.push(`/d/${dossierId}/pv/${saved.report_id}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create report.");
+      toast.error(err instanceof Error ? err.message : t.pv.createReportFailedToast);
     } finally {
       setSaving(false);
     }
@@ -108,10 +104,7 @@ export default function NewPVReportPage() {
       <div className="mx-auto w-full max-w-6xl space-y-6 px-6 py-8">
         <header className="space-y-2">
           <h1 className="font-serif text-3xl font-bold">{t.pv.newReport}</h1>
-          <p className="text-sm text-slate-600">
-            Start from a filed source document or enter the case manually. The four ICSR minimum criteria are
-            validated as you work.
-          </p>
+          <p className="text-sm text-slate-600">{t.pv.newReportHint}</p>
         </header>
 
         <Card className="border-slate-200/70 bg-white/90">
@@ -122,22 +115,20 @@ export default function NewPVReportPage() {
               </div>
               <div>
                 <CardTitle className="font-serif text-lg">{t.pv.sourceDocument}</CardTitle>
-                <CardDescription className="text-xs">
-                  Optional — extracts fields from an already-uploaded CIOMS/ADR document
-                </CardDescription>
+                <CardDescription className="text-xs">{t.pv.sourceDocumentHint}</CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4 pt-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
               <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-semibold text-slate-600">Filed document</span>
+                <span className="text-xs font-semibold text-slate-600">{t.pv.filedDocument}</span>
                 <select
                   className={inputClass}
                   value={selectedDocKey}
                   onChange={(event) => setSelectedDocKey(event.target.value)}
                 >
-                  <option value="">Select a source document…</option>
+                  <option value="">{t.pv.selectSourceDocument}</option>
                   {docs.map((doc) => (
                     <option key={`${doc.section_path}|${doc.stem}`} value={`${doc.section_path}|${doc.stem}`}>
                       {doc.filename || doc.title || doc.stem} · {doc.module}
@@ -147,28 +138,23 @@ export default function NewPVReportPage() {
               </label>
               <Button type="button" onClick={extractFromSource} disabled={extracting || !selectedDoc}>
                 {extracting ? <Loader2 className="h-4 w-4 animate-spin" /> : <WandSparkles className="h-4 w-4" />}
-                Extract
+                {t.pv.extract}
               </Button>
             </div>
 
             {extractionSource && (
               <div className="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-xs text-indigo-800">
                 <Sparkles className="h-3.5 w-3.5" />
-                <span>
-                  {extractionSource === "llm"
-                    ? "AI extraction applied. Review every field before saving."
-                    : "Deterministic label extraction applied. Review every field before saving."}
-                </span>
+                <span>{extractionSource === "llm" ? t.pv.aiExtractionBanner : t.pv.ruleExtractionBanner}</span>
                 <Badge variant="outline" className="ml-auto border-indigo-200 bg-white text-indigo-700">
-                  {extractionSource === "llm" ? "AI" : "Rules"}
+                  {extractionSource === "llm" ? t.pv.aiBadge : t.pv.rulesBadge}
                 </Badge>
               </div>
             )}
 
             {docs.length === 0 && (
               <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                No filed documents are available yet. Upload a CIOMS-style PDF or DOCX from the dossier dashboard,
-                then return here to extract it.
+                {t.pv.noFiledDocuments}
               </p>
             )}
           </CardContent>

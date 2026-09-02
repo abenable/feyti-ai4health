@@ -38,7 +38,7 @@ export default function LiteratureSearchPage() {
 
   const search = async () => {
     if (!query.trim()) {
-      toast.error("Enter a search query.");
+      toast.error(t.literature.enterQueryToast);
       return;
     }
     setLoading(true);
@@ -52,9 +52,9 @@ export default function LiteratureSearchPage() {
       })) as LiteratureResult[];
       setResults(data);
       await loadSearches();
-      toast.success(`${data.length} results found.`);
+      toast.success(t.literature.resultsFoundToast.replace("{count}", String(data.length)));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Literature search failed.");
+      toast.error(err instanceof Error ? err.message : t.literature.searchFailedToast);
     } finally {
       setLoading(false);
     }
@@ -69,7 +69,7 @@ export default function LiteratureSearchPage() {
       );
       setResults(saved.results || []);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load saved search.");
+      toast.error(err instanceof Error ? err.message : t.literature.loadSavedFailedToast);
     } finally {
       setLoading(false);
     }
@@ -82,9 +82,9 @@ export default function LiteratureSearchPage() {
         query: query.trim() || result.title,
         url: result.url,
       });
-      toast.success("Reference filed into Module 5.");
+      toast.success(t.literature.filedToast);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to file reference.");
+      toast.error(err instanceof Error ? err.message : t.literature.fileFailedToast);
     } finally {
       setFilingUrl(null);
     }
@@ -103,26 +103,24 @@ export default function LiteratureSearchPage() {
               <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{t.literature.subtitle}</p>
             </div>
           </div>
-          <p className="max-w-2xl text-sm text-slate-600">
-            Search PubMed, Semantic Scholar, PLoS, Springer, BMC, PAMJ, and Uganda MoH. File references into Module 5.
-          </p>
+          <p className="max-w-2xl text-sm text-slate-600">{t.literature.description}</p>
         </header>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-4">
           <Card className="lg:col-span-3">
             <CardHeader className="border-b border-slate-100 pb-4">
-              <CardTitle className="font-serif text-lg">Search</CardTitle>
-              <CardDescription>Server-side query building, parallel search, and heuristic ranking</CardDescription>
+              <CardTitle className="font-serif text-lg">{t.literature.searchCardTitle}</CardTitle>
+              <CardDescription>{t.literature.searchCardDesc}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5 lg:items-end">
                 <label className="space-y-1.5 lg:col-span-2">
                   <span className="text-xs font-semibold text-slate-600">{t.literature.query}</span>
-                  <input className={inputClass} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="artemisinin resistance Uganda" />
+                  <input className={inputClass} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t.literature.queryPlaceholder} />
                 </label>
                 <label className="space-y-1.5">
                   <span className="text-xs font-semibold text-slate-600">{t.literature.region}</span>
-                  <input className={inputClass} value={region} onChange={(event) => setRegion(event.target.value)} placeholder="Uganda" />
+                  <input className={inputClass} value={region} onChange={(event) => setRegion(event.target.value)} placeholder={t.literature.regionPlaceholder} />
                 </label>
                 <label className="space-y-1.5">
                   <span className="text-xs font-semibold text-slate-600">{t.literature.from}</span>
@@ -134,11 +132,11 @@ export default function LiteratureSearchPage() {
                 </label>
                 <label className="space-y-1.5 lg:col-span-4">
                   <span className="text-xs font-semibold text-slate-600">{t.literature.topics}</span>
-                  <input className={inputClass} value={topics} onChange={(event) => setTopics(event.target.value)} placeholder="safety, efficacy, resistance" />
+                  <input className={inputClass} value={topics} onChange={(event) => setTopics(event.target.value)} placeholder={t.literature.topicsPlaceholder} />
                 </label>
                 <Button className="lg:col-span-1" onClick={search} disabled={loading}>
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                  Search
+                  {t.literature.search}
                 </Button>
               </div>
 
@@ -151,7 +149,8 @@ export default function LiteratureSearchPage() {
                           {result.title}
                         </a>
                         <p className="text-xs text-slate-500">
-                          {result.source} · {result.year || "n.d."} · relevance {result.relevance_score}
+                          {result.source} · {result.year || t.literature.noDate} ·{" "}
+                          {t.literature.relevance.replace("{score}", String(result.relevance_score))}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -160,7 +159,7 @@ export default function LiteratureSearchPage() {
                         </a>
                         <Button size="sm" variant="outline" onClick={() => fileResult(result)} disabled={filingUrl === result.url}>
                           {filingUrl === result.url ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FilePlus2 className="h-3.5 w-3.5" />}
-                          File
+                          {t.literature.file}
                         </Button>
                       </div>
                     </div>
@@ -169,7 +168,7 @@ export default function LiteratureSearchPage() {
                 ))}
                 {!loading && results.length === 0 && (
                   <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                    No results yet. Run a search to populate this list.
+                    {t.literature.noResultsYet}
                   </p>
                 )}
               </div>
@@ -192,13 +191,15 @@ export default function LiteratureSearchPage() {
                   <p className="truncate text-sm font-semibold text-slate-800">{entry.query}</p>
                   <p className="flex items-center gap-1 text-xs text-slate-500">
                     <History className="h-3 w-3" />
-                    {entry.count} results · {new Date(entry.date).toLocaleString()}
+                    {t.literature.resultsAndDate
+                      .replace("{count}", String(entry.count))
+                      .replace("{date}", new Date(entry.date).toLocaleString())}
                   </p>
                 </button>
               ))}
               {searches.length === 0 && (
                 <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                  No saved searches yet.
+                  {t.literature.noSavedSearches}
                 </p>
               )}
             </CardContent>

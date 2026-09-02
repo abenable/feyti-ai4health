@@ -158,7 +158,7 @@ export default function DossierPickerPage() {
             <motion.div
               role="dialog"
               aria-modal="true"
-              aria-label="Create a new dossier"
+              aria-label={t.home.createDialogAria}
               initial={{ opacity: 0, scale: 0.96, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 8 }}

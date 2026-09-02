@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/card";
 import { PVReportForm } from "@/components/pv-report-form";
 import { apiFetch, apiJson, dossierApi, downloadFromApi } from "@/lib/api";
-import { useLanguage } from "@/lib/i18n";
+import { pvCausalityLabel, pvSeverityLabel, pvStatusLabel, useLanguage } from "@/lib/i18n";
 import {
   PV_CAUSALITY_OPTIONS,
   PV_SEVERITY_OPTIONS,
@@ -92,11 +92,11 @@ export default function PVReportDetailPage() {
       setExpected(expectedReactions);
       setCriteria(criteriaCheck);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load ADR report.");
+      toast.error(err instanceof Error ? err.message : t.pvDetail.loadFailedToast);
     } finally {
       setLoading(false);
     }
-  }, [dossierId, reportId]);
+  }, [dossierId, reportId, t]);
 
   useEffect(() => {
     void load();
@@ -129,9 +129,9 @@ export default function PVReportDetailPage() {
       )) as ADRReport;
       setForm(saved);
       await refreshCriteria();
-      toast.success("ADR report saved.");
+      toast.success(t.pvDetail.savedToast);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save report.");
+      toast.error(err instanceof Error ? err.message : t.pvDetail.saveFailedToast);
     } finally {
       setSaving(false);
     }
@@ -141,7 +141,7 @@ export default function PVReportDetailPage() {
     if (!form) return;
     const term = form.reaction_meddra_term || form.reaction_description;
     if (!term?.trim()) {
-      toast.error("Enter a reaction term before requesting a MedDRA suggestion.");
+      toast.error(t.pvDetail.enterTermFirstToast);
       return;
     }
 
@@ -152,9 +152,9 @@ export default function PVReportDetailPage() {
         { method: "POST" }
       );
       setMeddraSuggestion(suggestion);
-      toast.success("MedDRA suggestion ready — review before confirming.");
+      toast.success(t.pvDetail.suggestionReadyToast);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "MedDRA suggestion failed.");
+      toast.error(err instanceof Error ? err.message : t.pvDetail.suggestionFailedToast);
     } finally {
       setSuggesting(false);
     }
@@ -174,9 +174,9 @@ export default function PVReportDetailPage() {
       );
       setForm(confirmed);
       setMeddraSuggestion(null);
-      toast.success("MedDRA coding confirmed.");
+      toast.success(t.pvDetail.meddraConfirmedToast);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "MedDRA confirmation failed.");
+      toast.error(err instanceof Error ? err.message : t.pvDetail.meddraConfirmFailedToast);
     } finally {
       setConfirming(false);
     }
@@ -193,9 +193,9 @@ export default function PVReportDetailPage() {
       );
       setForm(updated);
       setFollowNote("");
-      toast.success("Follow-up added.");
+      toast.success(t.pvDetail.followUpAddedToast);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to add follow-up.");
+      toast.error(err instanceof Error ? err.message : t.pvDetail.followUpFailedToast);
     } finally {
       setAddingFollowUp(false);
     }
@@ -205,9 +205,9 @@ export default function PVReportDetailPage() {
     setSavingExpected(true);
     try {
       await apiJson(dossierApi(dossierId, "/pv/expected-reactions"), "PUT", expected);
-      toast.success("Reference safety information saved.");
+      toast.success(t.pvDetail.rsiSavedToast);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save expected reactions.");
+      toast.error(err instanceof Error ? err.message : t.pvDetail.rsiFailedToast);
     } finally {
       setSavingExpected(false);
     }
@@ -220,9 +220,9 @@ export default function PVReportDetailPage() {
         dossierApi(dossierId, `/pv/reports/${reportId}/e2b`),
         `${reportId}-e2b-r3.xml`
       );
-      toast.success("E2B(R3) XML downloaded.");
+      toast.success(t.pvDetail.e2bDownloadedToast);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "E2B export failed.");
+      toast.error(err instanceof Error ? err.message : t.pvDetail.e2bFailedToast);
     } finally {
       setExporting(false);
     }
@@ -232,7 +232,7 @@ export default function PVReportDetailPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">
         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-        Loading ADR report…
+        {t.pvDetail.loading}
       </div>
     );
   }
@@ -248,20 +248,20 @@ export default function PVReportDetailPage() {
               href={`/d/${dossierId}/pv`}
               className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
             >
-              ← All ADR reports
+              {t.pvDetail.allReports}
             </Link>
             <h1 className="font-serif text-3xl font-bold leading-none">
-              {form.reaction_meddra_term || form.reaction_description || "ADR report"}
+              {form.reaction_meddra_term || form.reaction_description || t.pvDetail.untitledReport}
             </h1>
             <p className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
               <Badge variant="outline" className="capitalize">
-                {form.status.replaceAll("_", " ")}
+                {pvStatusLabel(t, form.status)}
               </Badge>
               {form.is_serious && (
-                <Badge className="border-none bg-rose-100 text-rose-800">Serious</Badge>
+                <Badge className="border-none bg-rose-100 text-rose-800">{t.pv.serious}</Badge>
               )}
               {form.is_susar && (
-                <Badge className="border-none bg-amber-100 text-amber-800">SUSAR</Badge>
+                <Badge className="border-none bg-amber-100 text-amber-800">{t.pv.susar}</Badge>
               )}
               <span className="font-mono">{form.report_id}</span>
             </p>
@@ -269,11 +269,11 @@ export default function PVReportDetailPage() {
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={exportE2B} disabled={exporting}>
               {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-              E2B XML
+              {t.pv.e2b}
             </Button>
             <Button onClick={save} disabled={saving}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save
+              {t.pv.save}
             </Button>
           </div>
         </header>
@@ -296,14 +296,14 @@ export default function PVReportDetailPage() {
                     <AlertTriangle className="h-5 w-5 text-amber-700" />
                   )}
                   <span className="font-serif text-lg font-semibold text-slate-800">
-                    ICSR minimum criteria
+                    {t.pvDetail.minimumCriteria}
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <CriterionPill label="Patient" met={criteria.patient} />
-                  <CriterionPill label="Reporter" met={criteria.reporter} />
-                  <CriterionPill label="Product" met={criteria.product} />
-                  <CriterionPill label="Reaction" met={criteria.reaction} />
+                  <CriterionPill label={t.pvDetail.critPatient} met={criteria.patient} />
+                  <CriterionPill label={t.pvDetail.critReporter} met={criteria.reporter} />
+                  <CriterionPill label={t.pvDetail.critProduct} met={criteria.product} />
+                  <CriterionPill label={t.pvDetail.critReaction} met={criteria.reaction} />
                 </div>
               </div>
               {criteria.description && (
@@ -324,9 +324,7 @@ export default function PVReportDetailPage() {
                 </div>
                 <div>
                   <CardTitle className="font-serif text-lg">{t.pv.meddra}</CardTitle>
-                  <CardDescription className="text-xs">
-                    Suggestions are unconfirmed until a qualified reviewer approves them.
-                  </CardDescription>
+                  <CardDescription className="text-xs">{t.pvDetail.meddraHint}</CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -337,29 +335,29 @@ export default function PVReportDetailPage() {
                     <div>
                       <p className="font-semibold text-emerald-900">{form.reaction_pt_name}</p>
                       <p className="font-mono text-xs text-emerald-700">
-                        {form.reaction_pt_code || "No code available"}
+                        {form.reaction_pt_code || t.pvDetail.noCodeAvailable}
                       </p>
                     </div>
                     <Badge className="border-none bg-emerald-100 text-emerald-800">
-                      {confirmed ? "Confirmed" : "Coded"}
+                      {confirmed ? t.pvDetail.confirmed : t.pvDetail.coded}
                     </Badge>
                   </div>
                 </div>
               ) : (
                 <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                  This reaction is not coded yet.
+                  {t.pvDetail.notCodedYet}
                 </p>
               )}
 
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" onClick={suggestMeddra} disabled={suggesting}>
                   {suggesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                  Suggest MedDRA
+                  {t.pvDetail.suggestMeddra}
                 </Button>
                 {meddraSuggestion && (
                   <Button type="button" onClick={confirmMeddra} disabled={confirming}>
                     {confirming ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                    Confirm coding
+                    {t.pvDetail.confirmCoding}
                   </Button>
                 )}
               </div>
@@ -371,12 +369,10 @@ export default function PVReportDetailPage() {
                       {meddraSuggestion.pt_name || form.reaction_meddra_term}
                     </span>
                     <span className="font-mono text-xs text-indigo-700">
-                      {meddraSuggestion.pt_code || "No code"}
+                      {meddraSuggestion.pt_code || t.pvDetail.noCode}
                     </span>
                   </div>
-                  <p className="mt-2 text-xs text-indigo-800">
-                    Unconfirmed suggestion only — not a licensed MedDRA assertion.
-                  </p>
+                  <p className="mt-2 text-xs text-indigo-800">{t.pvDetail.unconfirmedSuggestion}</p>
                 </div>
               )}
             </CardContent>
@@ -391,9 +387,7 @@ export default function PVReportDetailPage() {
                   </div>
                   <div>
                     <CardTitle className="font-serif text-lg">{t.pv.followUps}</CardTitle>
-                    <CardDescription className="text-xs">
-                      Add case-version notes and requested information.
-                    </CardDescription>
+                    <CardDescription className="text-xs">{t.pvDetail.followUpsHint}</CardDescription>
                   </div>
                 </div>
                 <Badge variant="outline">{form.follow_ups?.length ?? 0}</Badge>
@@ -402,7 +396,7 @@ export default function PVReportDetailPage() {
             <CardContent className="space-y-4 pt-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr_auto] sm:items-end">
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-xs font-semibold text-slate-600">Date</span>
+                  <span className="text-xs font-semibold text-slate-600">{t.pvDetail.date}</span>
                   <input
                     type="date"
                     className={inputClass}
@@ -411,17 +405,17 @@ export default function PVReportDetailPage() {
                   />
                 </label>
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-xs font-semibold text-slate-600">Note</span>
+                  <span className="text-xs font-semibold text-slate-600">{t.pvDetail.note}</span>
                   <input
                     className={inputClass}
                     value={followNote}
                     onChange={(event) => setFollowNote(event.target.value)}
-                    placeholder="Requested hospital discharge summary…"
+                    placeholder={t.pvDetail.followUpNotePlaceholder}
                   />
                 </label>
                 <Button type="button" onClick={addFollowUp} disabled={addingFollowUp}>
                   {addingFollowUp ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />}
-                  Add
+                  {t.pvDetail.add}
                 </Button>
               </div>
 
@@ -442,7 +436,7 @@ export default function PVReportDetailPage() {
                   ))
                 ) : (
                   <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                    No follow-ups recorded.
+                    {t.pvDetail.noFollowUps}
                   </p>
                 )}
               </div>
@@ -455,9 +449,7 @@ export default function PVReportDetailPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <CardTitle className="font-serif text-lg">{t.pv.expectedReactions}</CardTitle>
-                <CardDescription className="text-xs">
-                  Expected reactions used for deterministic expectedness and SUSAR checks.
-                </CardDescription>
+                <CardDescription className="text-xs">{t.pvDetail.expectedReactionsHint}</CardDescription>
               </div>
               <div className="flex gap-2">
                 <Button
@@ -470,11 +462,11 @@ export default function PVReportDetailPage() {
                     ])
                   }
                 >
-                  Add reaction
+                  {t.pvDetail.addReaction}
                 </Button>
                 <Button type="button" onClick={saveExpected} disabled={savingExpected}>
                   {savingExpected ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  Save RSI
+                  {t.pvDetail.saveRsi}
                 </Button>
               </div>
             </div>
@@ -482,7 +474,7 @@ export default function PVReportDetailPage() {
           <CardContent className="space-y-3 pt-4">
             {expected.length === 0 ? (
               <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                No expected reactions configured. Every coded reaction will be treated as unexpected.
+                {t.pvDetail.noExpectedReactions}
               </p>
             ) : (
               expected.map((reaction, index) => (
@@ -491,7 +483,7 @@ export default function PVReportDetailPage() {
                   className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_2fr_auto] lg:items-end"
                 >
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-xs font-semibold text-slate-600">PT code</span>
+                    <span className="text-xs font-semibold text-slate-600">{t.pvDetail.ptCode}</span>
                     <input
                       className={inputClass}
                       value={reaction.pt_code}
@@ -503,7 +495,7 @@ export default function PVReportDetailPage() {
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-xs font-semibold text-slate-600">PT name</span>
+                    <span className="text-xs font-semibold text-slate-600">{t.pvDetail.ptName}</span>
                     <input
                       className={inputClass}
                       value={reaction.pt_name}
@@ -515,7 +507,7 @@ export default function PVReportDetailPage() {
                     />
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-xs font-semibold text-slate-600">Severity</span>
+                    <span className="text-xs font-semibold text-slate-600">{t.pvForm.severity}</span>
                     <select
                       className={selectClass}
                       value={reaction.severity ?? ""}
@@ -529,16 +521,16 @@ export default function PVReportDetailPage() {
                         )
                       }
                     >
-                      <option value="">Any</option>
+                      <option value="">{t.pvDetail.any}</option>
                       {PV_SEVERITY_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>
-                          {option.label}
+                          {pvSeverityLabel(t, option.value)}
                         </option>
                       ))}
                     </select>
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-xs font-semibold text-slate-600">Causality</span>
+                    <span className="text-xs font-semibold text-slate-600">{t.pvForm.causality}</span>
                     <select
                       className={selectClass}
                       value={reaction.causality ?? ""}
@@ -552,16 +544,16 @@ export default function PVReportDetailPage() {
                         )
                       }
                     >
-                      <option value="">Any</option>
+                      <option value="">{t.pvDetail.any}</option>
                       {PV_CAUSALITY_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>
-                          {option.label}
+                          {pvCausalityLabel(t, option.value)}
                         </option>
                       ))}
                     </select>
                   </label>
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-xs font-semibold text-slate-600">Notes</span>
+                    <span className="text-xs font-semibold text-slate-600">{t.pvDetail.notes}</span>
                     <input
                       className={inputClass}
                       value={reaction.notes ?? ""}
@@ -577,7 +569,7 @@ export default function PVReportDetailPage() {
                     variant="ghost"
                     size="icon"
                     onClick={() => setExpected((prev) => prev.filter((_, i) => i !== index))}
-                    aria-label="Remove expected reaction"
+                    aria-label={t.pvDetail.removeExpectedReaction}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>

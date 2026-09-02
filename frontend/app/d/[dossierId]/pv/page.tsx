@@ -23,7 +23,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { apiFetch, dossierApi } from "@/lib/api";
-import { useLanguage } from "@/lib/i18n";
+import { pvSeverityLabel, pvStatusLabel, useLanguage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { ADRReport } from "@/lib/types";
 
@@ -84,26 +84,24 @@ export default function PVReportsPage() {
               <div>
                 <h1 className="font-serif text-3xl font-bold leading-none">{t.pv.title}</h1>
                 <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  ADR / ICSR reporting
+                  {t.pv.subtitle}
                 </p>
               </div>
             </div>
-            <p className="max-w-2xl text-sm text-slate-600">
-              Create, validate, code, and export adverse drug reaction reports as E2B(R3) ICSRs.
-            </p>
+            <p className="max-w-2xl text-sm text-slate-600">{t.pv.description}</p>
           </div>
           <Link href={`/d/${dossierId}/pv/new`} className={cn(buttonVariants(), "w-fit")}>
             <FilePlus2 className="h-4 w-4" />
-            New report
+            {t.pv.newReport}
           </Link>
         </header>
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
-            { label: "Total reports", value: stats.total },
-            { label: "Serious cases", value: stats.serious },
-            { label: "SUSARs", value: stats.susar },
-            { label: "Drafts", value: stats.drafts },
+            { label: t.pv.totalReports, value: stats.total },
+            { label: t.pv.seriousCases, value: stats.serious },
+            { label: t.pv.susars, value: stats.susar },
+            { label: t.pv.drafts, value: stats.drafts },
           ].map((stat) => (
             <Card key={stat.label} className="border-slate-200/70 bg-white/90">
               <CardContent className="space-y-1 pt-0">
@@ -118,7 +116,7 @@ export default function PVReportsPage() {
           <Card className="border-slate-200/70 bg-white/90">
             <CardContent className="flex items-center justify-center py-16 text-slate-500">
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Loading reports…
+              {t.pv.loadingReports}
             </CardContent>
           </Card>
         ) : reports.length === 0 ? (
@@ -128,14 +126,12 @@ export default function PVReportsPage() {
                 <Activity className="h-8 w-8" />
               </div>
               <div>
-                <h2 className="font-serif text-xl font-semibold text-slate-800">No ADR reports yet</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Create a report manually or extract one from an uploaded CIOMS-style source document.
-                </p>
+                <h2 className="font-serif text-xl font-semibold text-slate-800">{t.pv.noReportsTitle}</h2>
+                <p className="mt-1 text-sm text-slate-500">{t.pv.noReportsBody}</p>
               </div>
               <Link href={`/d/${dossierId}/pv/new`} className={buttonVariants()}>
                 <FilePlus2 className="h-4 w-4" />
-                Create the first report
+                {t.pv.createFirstReport}
               </Link>
             </CardContent>
           </Card>
@@ -150,16 +146,16 @@ export default function PVReportsPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 space-y-1">
                       <CardTitle className="truncate font-serif text-lg text-slate-800">
-                        {report.reaction_meddra_term || report.reaction_description || "Untitled reaction"}
+                        {report.reaction_meddra_term || report.reaction_description || t.pv.untitledReaction}
                       </CardTitle>
                       <CardDescription className="flex flex-wrap items-center gap-2 text-xs">
                         <span className="inline-flex items-center gap-1">
                           <Pill className="h-3.5 w-3.5" />
-                          {report.product_name || "Unknown product"}
+                          {report.product_name || t.pv.unknownProduct}
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <User className="h-3.5 w-3.5" />
-                          {report.patient?.identifier || report.patient?.initials || "Unknown patient"}
+                          {report.patient?.identifier || report.patient?.initials || t.pv.unknownPatient}
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <Calendar className="h-3.5 w-3.5" />
@@ -169,16 +165,16 @@ export default function PVReportsPage() {
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-2">
                       <Badge variant="outline" className={`capitalize ${statusClasses(report.status)}`}>
-                        {report.status.replaceAll("_", " ")}
+                        {pvStatusLabel(t, report.status)}
                       </Badge>
                       {report.is_serious && (
                         <Badge className="border-none bg-rose-100 text-rose-800">
                           <ShieldAlert className="h-3 w-3" />
-                          Serious
+                          {t.pv.serious}
                         </Badge>
                       )}
                       {report.is_susar && (
-                        <Badge className="border-none bg-amber-100 text-amber-800">SUSAR</Badge>
+                        <Badge className="border-none bg-amber-100 text-amber-800">{t.pv.susar}</Badge>
                       )}
                     </div>
                   </div>
@@ -186,19 +182,19 @@ export default function PVReportsPage() {
                 <CardContent className="space-y-4 pt-4">
                   <div className="space-y-2 text-sm text-slate-600">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-xs font-semibold uppercase text-slate-400">Reporter</span>
-                      <span className="truncate">{report.reporter_name || report.reporter_organisation || "Unknown"}</span>
+                      <span className="text-xs font-semibold uppercase text-slate-400">{t.pv.reporter}</span>
+                      <span className="truncate">{report.reporter_name || report.reporter_organisation || t.pv.unknown}</span>
                     </div>
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-xs font-semibold uppercase text-slate-400">Severity</span>
-                      <span className="capitalize">{report.severity?.replaceAll("_", " ") || "Not assessed"}</span>
+                      <span className="text-xs font-semibold uppercase text-slate-400">{t.pvForm.severity}</span>
+                      <span className="capitalize">{report.severity ? pvSeverityLabel(t, report.severity) : t.pvForm.severityNotAssessed}</span>
                     </div>
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-xs font-semibold uppercase text-slate-400">MedDRA</span>
+                      <span className="text-xs font-semibold uppercase text-slate-400">{t.pv.meddraLabel}</span>
                       <span className="truncate">
                         {report.reaction_pt_name
                           ? `${report.reaction_pt_name}${report.reaction_pt_code ? ` (${report.reaction_pt_code})` : ""}`
-                          : "Uncoded"}
+                          : t.pv.uncoded}
                       </span>
                     </div>
                   </div>
@@ -206,7 +202,7 @@ export default function PVReportsPage() {
                     href={`/d/${dossierId}/pv/${report.report_id}`}
                     className={cn(buttonVariants({ variant: "outline" }), "w-full")}
                   >
-                    Open report
+                    {t.pv.openReport}
                   </Link>
                 </CardContent>
               </Card>
