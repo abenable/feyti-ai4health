@@ -65,8 +65,8 @@ export function Nav() {
   return (
     <TooltipProvider delay={200}>
       <nav className="sticky top-0 z-40 w-full border-b border-slate-200/60 bg-[#fdfbf7]/90 backdrop-blur-xl">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-2 xl:gap-4">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0 shrink-0">
             <Link href="/" className="font-serif text-lg font-bold text-slate-900 tracking-tight shrink-0 whitespace-nowrap">
               Feyti
             </Link>
@@ -78,56 +78,71 @@ export function Nav() {
             )}
           </div>
 
-          <div className="flex items-center gap-1 min-w-0">
-            <LanguageSwitcher />
-            {links.map(({ href, label, icon: Icon }) => {
-              // The dashboard link (bare /d/{id}) must match exactly, or it would
-              // also light up on /d/{id}/structure and /d/{id}/chat.
-              const active = href === `/d/${dossierId}` ? pathname === href : pathname.startsWith(href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={`flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider whitespace-nowrap shrink-0 transition-colors ${
-                    active
-                      ? "bg-indigo-100 text-indigo-800"
-                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span className="hidden xl:inline">{label}</span>
-                </Link>
-              );
-            })}
+          {links.length > 0 && (
+            <div className="flex-1 min-w-0 overflow-x-auto scrollbar-thin">
+              <div className="flex items-center gap-0.5 w-max rounded-full bg-slate-100/70 p-0.5">
+                {links.map(({ href, label, icon: Icon }) => {
+                  // The dashboard link (bare /d/{id}) must match exactly, or it would
+                  // also light up on /d/{id}/structure and /d/{id}/chat.
+                  const active = href === `/d/${dossierId}` ? pathname === href : pathname.startsWith(href);
+                  return (
+                    <Tooltip key={href}>
+                      <TooltipTrigger
+                        render={<Link href={href} />}
+                        className={`flex items-center gap-1.5 px-2.5 lg:px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider whitespace-nowrap shrink-0 transition-colors ${
+                          active
+                            ? "bg-white text-indigo-800 shadow-sm"
+                            : "text-slate-500 hover:bg-white/70 hover:text-slate-800"
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        <span className="hidden lg:inline">{label}</span>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="lg:hidden bg-slate-800 text-white border-none shadow-xl">
+                        {label}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 shrink-0 pl-2 sm:border-l sm:border-slate-200/60">
             {dossierId && (
-              <Link
-                href="/"
-                className="flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider whitespace-nowrap shrink-0 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
-              >
-                <ArrowLeftRight className="w-3.5 h-3.5" />
-                <span className="hidden xl:inline">{t.nav.switch}</span>
-              </Link>
+              <Tooltip>
+                <TooltipTrigger
+                  render={<Link href="/" />}
+                  className="flex items-center justify-center w-7 h-7 rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+                >
+                  <ArrowLeftRight className="w-3.5 h-3.5" />
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="bg-slate-800 text-white border-none shadow-xl">
+                  {t.nav.switch}
+                </TooltipContent>
+              </Tooltip>
+            )}
+
+            <LanguageSwitcher />
+
+            {isBackendOnline !== null && (
+              <Tooltip>
+                <TooltipTrigger
+                  className={
+                    "flex items-center justify-center w-7 h-7 rounded-full border shadow-sm transition-colors outline-none cursor-pointer shrink-0 " +
+                    (isBackendOnline
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                      : "bg-red-50 border-red-200 text-red-700 hover:bg-red-100")
+                  }
+                >
+                  {isBackendOnline ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="bg-slate-800 text-white border-none shadow-xl max-w-xs text-center">
+                  {isBackendOnline ? t.nav.systemOnlineTooltip : t.nav.systemOfflineTooltip}
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
-
-          {isBackendOnline !== null && (
-            <Tooltip>
-              <TooltipTrigger
-                className={
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider border shadow-sm transition-colors outline-none cursor-pointer shrink-0 " +
-                  (isBackendOnline
-                    ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
-                    : "bg-red-50 border-red-200 text-red-700 hover:bg-red-100")
-                }
-              >
-                {isBackendOnline ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
-                <span className="hidden xl:inline">{isBackendOnline ? t.nav.systemOnline : t.nav.systemOffline}</span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="bg-slate-800 text-white border-none shadow-xl max-w-xs text-center">
-                {isBackendOnline ? t.nav.systemOnlineTooltip : t.nav.systemOfflineTooltip}
-              </TooltipContent>
-            </Tooltip>
-          )}
         </div>
       </nav>
     </TooltipProvider>
