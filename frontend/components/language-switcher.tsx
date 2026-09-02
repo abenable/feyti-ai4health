@@ -5,10 +5,10 @@ import { Languages } from "lucide-react";
 import { useLanguage, type Language } from "@/lib/i18n";
 
 const OPTIONS: { value: Language; label: string }[] = [
-  { value: "en", label: "EN" },
-  { value: "fr", label: "FR" },
-  { value: "pt", label: "PT" },
-  { value: "sw", label: "SW" },
+  { value: "en", label: "English" },
+  { value: "fr", label: "Français" },
+  { value: "pt", label: "Português" },
+  { value: "sw", label: "Kiswahili" },
 ];
 
 export function LanguageSwitcher() {
@@ -21,7 +21,7 @@ export function LanguageSwitcher() {
       <select
         value={language}
         onChange={(event) => setLanguage(event.target.value as Language)}
-        className="bg-transparent text-xs font-semibold uppercase tracking-wide outline-none"
+        className="bg-transparent text-xs font-semibold outline-none"
         aria-label={t.language.label}
       >
         {OPTIONS.map((option) => (

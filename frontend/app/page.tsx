@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiFetch, apiJson } from "@/lib/api";
+import { useLanguage } from "@/lib/i18n";
 import type { DossierSummary } from "@/lib/types";
 
 function formatDate(iso: string) {
@@ -22,6 +23,7 @@ function formatDate(iso: string) {
 
 export default function DossierPickerPage() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [dossiers, setDossiers] = useState<DossierSummary[] | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
@@ -31,10 +33,10 @@ export default function DossierPickerPage() {
     try {
       setDossiers(await apiFetch<DossierSummary[]>("/api/v1/dossiers"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load dossiers.");
+      toast.error(err instanceof Error ? err.message : t.home.loadFailed);
       setDossiers([]);
     }
-  }, []);
+  }, [t.home.loadFailed]);
 
   useEffect(() => {
     // fetchDossiers only calls setState after its internal `await` resolves,
@@ -49,10 +51,10 @@ export default function DossierPickerPage() {
     setCreating(true);
     try {
       const dossier = await apiJson("/api/v1/dossiers", "POST", { name: name.trim() }) as DossierSummary;
-      toast.success(`"${dossier.name}" created.`);
+      toast.success(t.home.created.replace("{name}", dossier.name));
       router.push(`/d/${dossier.id}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create dossier.");
+      toast.error(err instanceof Error ? err.message : t.home.createFailed);
       setCreating(false);
     }
   };
@@ -69,22 +71,20 @@ export default function DossierPickerPage() {
           Feyti
         </h1>
         <p className="text-sm sm:text-base text-slate-500 font-medium tracking-[0.2em] uppercase mt-3">
-          Regulatory Document Intelligence
+          {t.home.tagline}
         </p>
         <p className="text-slate-600 text-base sm:text-lg leading-relaxed max-w-2xl mt-6">
-          Upload regulatory documents and Feyti extracts, classifies, and files them into the right
-          ICH CTD section — then drafts, validates, and helps you get each section submission-ready,
-          with an AI assistant grounded in your dossier throughout.
+          {t.home.description}
         </p>
 
         <div className="flex flex-wrap items-center justify-center gap-3 mt-8">
           <Button size="lg" onClick={() => setCreateOpen(true)}>
             <Plus className="w-4 h-4" />
-            New dossier
+            {t.home.newDossier}
           </Button>
           {dossiers && dossiers.length > 0 && (
             <Button size="lg" variant="outline" onClick={() => router.push(`/d/${dossiers[0].id}`)}>
-              Continue with {dossiers[0].name}
+              {t.home.continueWith.replace("{name}", dossiers[0].name)}
               <ArrowRight className="w-4 h-4" />
             </Button>
           )}
@@ -92,12 +92,12 @@ export default function DossierPickerPage() {
       </header>
 
       <main className="flex-1 w-full max-w-5xl mx-auto px-6 pb-16 relative z-10">
-        <h2 className="font-serif text-xl text-slate-800 mb-6">Your dossiers</h2>
+        <h2 className="font-serif text-xl text-slate-800 mb-6">{t.home.yourDossiers}</h2>
 
         {dossiers === null ? (
           <div className="flex items-center justify-center h-40 text-slate-500">
             <Loader2 className="w-5 h-5 animate-spin mr-2" />
-            Loading dossiers...
+            {t.home.loading}
           </div>
         ) : dossiers.length === 0 ? (
           <Card className="border-slate-200/60 shadow-xl shadow-indigo-100/20 bg-white/80 backdrop-blur-xl rounded-3xl overflow-hidden">
@@ -105,14 +105,11 @@ export default function DossierPickerPage() {
               <div className="w-16 h-16 rounded-3xl bg-indigo-100 flex items-center justify-center text-indigo-600 mb-4">
                 <FolderOpen className="w-8 h-8" />
               </div>
-              <h3 className="font-serif text-xl text-slate-800 mb-1">No dossiers yet</h3>
-              <p className="text-slate-500 text-sm max-w-sm mb-6">
-                Create a dossier for each product or submission you&apos;re preparing. Every dossier keeps
-                its own uploads, drafts, and product context.
-              </p>
+              <h3 className="font-serif text-xl text-slate-800 mb-1">{t.home.noDossiersTitle}</h3>
+              <p className="text-slate-500 text-sm max-w-sm mb-6">{t.home.noDossiersBody}</p>
               <Button onClick={() => setCreateOpen(true)}>
                 <Plus className="w-4 h-4" />
-                Create your first dossier
+                {t.home.createFirst}
               </Button>
             </CardContent>
           </Card>
@@ -134,10 +131,10 @@ export default function DossierPickerPage() {
                   <CardContent className="pt-0 flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <Badge variant="outline" className="text-[10px] px-2 py-0 rounded-full">
-                        {d.filed} filed
+                        {d.filed} {t.home.filed}
                       </Badge>
                       <Badge variant="outline" className="text-[10px] px-2 py-0 rounded-full bg-emerald-50 border-emerald-200 text-emerald-700">
-                        {d.approved} approved
+                        {d.approved} {t.home.approved}
                       </Badge>
                     </div>
                     <span className="text-[11px] text-slate-400">{formatDate(d.created_at)}</span>
@@ -169,7 +166,7 @@ export default function DossierPickerPage() {
               className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden"
             >
               <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-                <h2 className="font-serif text-lg text-slate-800">New dossier</h2>
+                <h2 className="font-serif text-lg text-slate-800">{t.home.createDialogTitle}</h2>
                 <button
                   type="button"
                   onClick={() => setCreateOpen(false)}
@@ -181,7 +178,7 @@ export default function DossierPickerPage() {
               </div>
               <div className="p-6 space-y-4">
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-xs font-medium text-slate-600">Dossier name</span>
+                  <span className="text-xs font-medium text-slate-600">{t.home.dossierName}</span>
                   <input
                     autoFocus
                     type="text"
@@ -190,13 +187,13 @@ export default function DossierPickerPage() {
                     onKeyDown={(e) => {
                       if (e.key === "Enter") createDossier();
                     }}
-                    placeholder="e.g. Povidone Oral Tablet — Uganda NDA"
+                    placeholder={t.home.namePlaceholder}
                     className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
                   />
                 </label>
                 <Button className="w-full" onClick={createDossier} disabled={creating || !name.trim()}>
                   {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                  Create dossier
+                  {t.home.createDossier}
                 </Button>
               </div>
             </motion.div>

@@ -36,6 +36,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { DossierTreePanel } from "@/components/dossier-tree";
 import { apiFetch, apiJson, dossierApi, getApiUrl, readErrorMessage, workspaceHref } from "@/lib/api";
+import { useLanguage, type Dictionary } from "@/lib/i18n";
 import {
   EMPTY_CONTEXT,
   type DossierTree,
@@ -45,14 +46,16 @@ import {
 } from "@/lib/types";
 
 // Field metadata drives the form so we don't hand-write six near-identical inputs.
-const CONTEXT_FIELDS: { key: keyof ProductContext; label: string; placeholder: string }[] = [
-  { key: "product_name", label: "Product name", placeholder: "e.g. Povidone Oral Tablet" },
-  { key: "active_ingredient", label: "Active ingredient(s)", placeholder: "e.g. Povidone" },
-  { key: "dosage_form", label: "Dosage form", placeholder: "e.g. Tablet" },
-  { key: "strength", label: "Strength", placeholder: "e.g. 500 mg" },
-  { key: "applicant", label: "Applicant / manufacturer", placeholder: "e.g. Acme Pharma Ltd" },
-  { key: "market", label: "Target market / authority", placeholder: "e.g. Uganda (NDA)" },
-];
+function contextFields(t: Dictionary): { key: keyof ProductContext; label: string; placeholder: string }[] {
+  return [
+    { key: "product_name", label: t.dossier.productName, placeholder: t.dossier.productNamePh },
+    { key: "active_ingredient", label: t.dossier.activeIngredient, placeholder: t.dossier.activeIngredientPh },
+    { key: "dosage_form", label: t.dossier.dosageForm, placeholder: t.dossier.dosageFormPh },
+    { key: "strength", label: t.dossier.strength, placeholder: t.dossier.strengthPh },
+    { key: "applicant", label: t.dossier.applicant, placeholder: t.dossier.applicantPh },
+    { key: "market", label: t.dossier.market, placeholder: t.dossier.marketPh },
+  ];
+}
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
 
@@ -75,6 +78,8 @@ function SectionBadge({ classification }: { classification: ProcessResponse["cla
 
 export default function DossierDashboard() {
   const { dossierId } = useParams<{ dossierId: string }>();
+  const { t } = useLanguage();
+  const CONTEXT_FIELDS = contextFields(t);
 
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "analyzing" | "success" | "error">("idle");
@@ -131,13 +136,13 @@ export default function DossierDashboard() {
       await apiJson(dossierApi(dossierId, "/context"), "PUT", context);
       savedContextRef.current = context;
       setEditingContext(false);
-      toast.success("Product details saved.");
+      toast.success(t.dossier.savedToast);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save.");
+      toast.error(err instanceof Error ? err.message : t.dossier.saveFailedToast);
     } finally {
       setSavingContext(false);
     }
-  }, [context, dossierId]);
+  }, [context, dossierId, t]);
 
   const cancelEditContext = useCallback(() => {
     setContext(savedContextRef.current);
@@ -164,7 +169,7 @@ export default function DossierDashboard() {
       setStatus("success");
       setFlashName(data.filename);
       setTimeout(() => setFlashName(null), 1500);
-      toast.success("Document filed");
+      toast.success(t.dossier.filedToast);
 
       try {
         const treeRes = await fetch(getApiUrl(dossierApi(dossierId, "/tree")));
@@ -175,9 +180,9 @@ export default function DossierDashboard() {
     } catch (err: unknown) {
       console.error(err);
       setStatus("error");
-      toast.error(err instanceof Error ? err.message : "An error occurred during processing.");
+      toast.error(err instanceof Error ? err.message : t.dossier.processErrorToast);
     }
-  }, [dossierId]);
+  }, [dossierId, t]);
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
@@ -191,19 +196,19 @@ export default function DossierDashboard() {
         !selectedFile.name.endsWith(".pdf") &&
         !selectedFile.name.endsWith(".docx")
       ) {
-        toast.error("Unsupported file type. Please upload a PDF or DOCX.");
+        toast.error(t.dossier.unsupportedFileToast);
         return;
       }
 
       if (selectedFile.size > MAX_FILE_SIZE) {
-        toast.error("File too large. Please upload a PDF or DOCX under 15MB.");
+        toast.error(t.dossier.fileTooLargeToast);
         return;
       }
 
       setFile(selectedFile);
       await handleUpload(selectedFile);
     },
-    [handleUpload],
+    [handleUpload, t],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -241,7 +246,7 @@ export default function DossierDashboard() {
               Feyti
             </h1>
             <p className="text-sm sm:text-base text-slate-500 font-medium tracking-[0.2em] uppercase mt-2">
-              Regulatory Document Intelligence
+              {t.home.tagline}
             </p>
           </div>
 
@@ -252,7 +257,7 @@ export default function DossierDashboard() {
             >
               <Gauge className="w-4 h-4 text-indigo-500" />
               <span className="text-sm text-slate-700">
-                <span className="font-semibold">{readiness.score}%</span> of drafted sections approved
+                <span className="font-semibold">{readiness.score}%</span> {t.dossier.scoreApproved}
               </span>
               <Badge variant="outline" className="text-[10px] px-2 py-0 rounded-full">
                 {readiness.totals.approved}/{readiness.totals.engaged}
@@ -271,18 +276,16 @@ export default function DossierDashboard() {
                 <Pill className="w-5 h-5" />
               </div>
               <div className="min-w-0">
-                <h3 className="font-serif text-lg text-slate-800">Product details</h3>
+                <h3 className="font-serif text-lg text-slate-800">{t.dossier.productDetails}</h3>
                 <p className="text-sm text-slate-500">
-                  {editingContext
-                    ? "Fill these in first — they ground classification and every generated document."
-                    : "Grounds classification and every generated document."}
+                  {editingContext ? t.dossier.productDetailsHintEdit : t.dossier.productDetailsHint}
                 </p>
               </div>
             </div>
             {!editingContext && (
               <Button variant="outline" size="sm" onClick={() => setEditingContext(true)} className="shrink-0">
                 <Edit3 className="w-4 h-4" />
-                Edit
+                {t.dossier.edit}
               </Button>
             )}
           </div>
@@ -308,12 +311,12 @@ export default function DossierDashboard() {
                   {Object.values(savedContextRef.current).some((v) => v.trim()) && (
                     <Button variant="outline" size="sm" onClick={cancelEditContext} disabled={savingContext}>
                       <X className="w-4 h-4" />
-                      Cancel
+                      {t.dossier.cancel}
                     </Button>
                   )}
                   <Button onClick={saveContext} disabled={savingContext} size="sm">
                     {savingContext ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Save details
+                    {t.dossier.saveDetails}
                   </Button>
                 </div>
               </>
@@ -336,19 +339,19 @@ export default function DossierDashboard() {
         <div className="lg:col-span-5 flex flex-col justify-center">
           <Badge className="w-fit mb-6 bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border-none px-5 py-2 shadow-sm rounded-full text-sm font-semibold tracking-wide">
             <span className="flex items-center gap-2">
-              <ShieldCheck className="w-5 h-7" /> Powered by Feyti AIcyclinder
+              <ShieldCheck className="w-5 h-7" /> {t.dossier.poweredBy}
             </span>
           </Badge>
 
           <h2 className="text-4xl sm:text-5xl font-serif font-bold tracking-tight text-slate-900 mb-6 leading-[1.15]">
-            Transform documents into{" "}
+            {t.dossier.heroTitlePrefix}{" "}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-500">
-              actionable insights.
+              {t.dossier.heroTitleHighlight}
             </span>
           </h2>
 
           <p className="text-lg text-slate-600 mb-10 leading-relaxed font-light">
-            Feyti extracts, classifies, and files your regulatory documents into the right CTD section.
+            {t.dossier.heroSubtitle}
           </p>
 
           <div className="space-y-8 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent">
@@ -357,11 +360,8 @@ export default function DossierDashboard() {
                 <UploadCloud className="w-5 h-5" />
               </div>
               <div className="pt-1.5">
-                <h4 className="font-semibold text-slate-900 text-lg">1. Upload</h4>
-                <p className="text-slate-600 mt-1.5 leading-relaxed text-sm">
-                  Drag and drop your PDF or DOCX file into the portal. The pipeline handles scanned
-                  pages with OCR when needed.
-                </p>
+                <h4 className="font-semibold text-slate-900 text-lg">{t.dossier.step1Title}</h4>
+                <p className="text-slate-600 mt-1.5 leading-relaxed text-sm">{t.dossier.step1Body}</p>
               </div>
             </div>
 
@@ -370,11 +370,8 @@ export default function DossierDashboard() {
                 <FileText className="w-5 h-5" />
               </div>
               <div className="pt-1.5">
-                <h4 className="font-semibold text-slate-900 text-lg">2. Extract &amp; classify</h4>
-                <p className="text-slate-600 mt-1.5 leading-relaxed text-sm">
-                  Feyti reads the document, identifies the CTD section, pulls structured fields, and
-                  scores the match so you can trust the filing.
-                </p>
+                <h4 className="font-semibold text-slate-900 text-lg">{t.dossier.step2Title}</h4>
+                <p className="text-slate-600 mt-1.5 leading-relaxed text-sm">{t.dossier.step2Body}</p>
               </div>
             </div>
 
@@ -383,11 +380,8 @@ export default function DossierDashboard() {
                 <FolderOpen className="w-5 h-5" />
               </div>
               <div className="pt-1.5">
-                <h4 className="font-semibold text-slate-900 text-lg">3. Filed into your dossier</h4>
-                <p className="text-slate-600 mt-1.5 leading-relaxed text-sm">
-                  The document lands in the correct module and folder, ready for review and validation
-                  in the Dossier workspace.
-                </p>
+                <h4 className="font-semibold text-slate-900 text-lg">{t.dossier.step3Title}</h4>
+                <p className="text-slate-600 mt-1.5 leading-relaxed text-sm">{t.dossier.step3Body}</p>
               </div>
             </div>
           </div>
@@ -407,10 +401,10 @@ export default function DossierDashboard() {
                 <Card className="border-slate-200/60 shadow-2xl shadow-indigo-100/30 bg-white/80 backdrop-blur-xl overflow-hidden rounded-3xl">
                   <CardHeader className="bg-slate-50/50 border-b border-slate-100/60 pb-6 px-6 sm:px-8 pt-8">
                     <CardTitle className="text-2xl font-serif text-slate-800">
-                      Upload a regulatory document
+                      {t.dossier.uploadTitle}
                     </CardTitle>
                     <CardDescription className="text-base mt-2">
-                      Drop a PDF or DOCX below and Feyti will file it into your CTD dossier.
+                      {t.dossier.uploadSubtitle}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="p-6 sm:p-8">
@@ -433,9 +427,9 @@ export default function DossierDashboard() {
                         </div>
                         <div>
                           <p className="text-lg font-medium text-slate-800 mb-1">
-                            {isDragActive ? "Drop the file to upload" : "Click or drag file to this area"}
+                            {isDragActive ? t.dossier.dropActive : t.dossier.dropIdle}
                           </p>
-                          <p className="text-sm text-slate-500">Strictly PDF or DOCX files allowed.</p>
+                          <p className="text-sm text-slate-500">{t.dossier.fileTypesHint}</p>
                         </div>
                       </motion.div>
                     </div>
@@ -462,7 +456,7 @@ export default function DossierDashboard() {
                     <RefreshCw className="w-8 h-8 animate-pulse" strokeWidth={1.5} />
                   </div>
                 </div>
-                <h3 className="font-serif text-3xl text-slate-800 mb-3">Analyzing Document</h3>
+                <h3 className="font-serif text-3xl text-slate-800 mb-3">{t.dossier.analyzing}</h3>
                 <p className="text-slate-500 font-light text-lg flex items-center justify-center gap-2 max-w-sm px-6 truncate">
                   <FileText className="w-4 h-4 flex-shrink-0" />
                   <span className="truncate">{file?.name}</span>
@@ -480,7 +474,7 @@ export default function DossierDashboard() {
                     <div className="space-y-1 overflow-hidden pr-4">
                       <CardTitle className="text-xl font-serif text-emerald-900 flex items-center gap-2">
                         <Sparkles className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-                        Filed Successfully
+                        {t.dossier.filedSuccessfully}
                       </CardTitle>
                       <CardDescription className="text-emerald-700 font-medium truncate">
                         {result.filename}
@@ -490,7 +484,7 @@ export default function DossierDashboard() {
                       variant="outline"
                       className="bg-white border-emerald-200 text-emerald-700 shadow-sm px-3 py-1 flex-shrink-0 rounded-full"
                     >
-                      {result.extracted_chars.toLocaleString()} chars
+                      {result.extracted_chars.toLocaleString()} {t.dossier.chars}
                     </Badge>
                   </CardHeader>
 
@@ -500,14 +494,14 @@ export default function DossierDashboard() {
                         <SectionBadge classification={result.classification} />
                         {result.ocr_used && (
                           <Badge variant="secondary" className="text-[10px] px-2 py-0.5 rounded-md">
-                            OCR
+                            {t.dossier.ocr}
                           </Badge>
                         )}
                       </div>
 
                       <div>
                         <div className="flex justify-between text-sm font-medium text-slate-700 mb-2">
-                          <span>Confidence</span>
+                          <span>{t.dossier.confidence}</span>
                           <span>{Math.round(result.classification.confidence * 100)}%</span>
                         </div>
                         <div className={confidenceProgressColor(result.classification.confidence)}>
@@ -529,7 +523,7 @@ export default function DossierDashboard() {
                       {result.summary && (
                         <div className="pt-1">
                           <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
-                            Summary
+                            {t.dossier.summary}
                           </p>
                           <p className="text-sm text-slate-700 leading-relaxed">{result.summary}</p>
                         </div>
@@ -538,7 +532,7 @@ export default function DossierDashboard() {
                       {result.key_points && result.key_points.length > 0 && (
                         <div className="pt-1">
                           <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
-                            Key Points
+                            {t.dossier.keyPoints}
                           </p>
                           <ul className="space-y-1.5">
                             {result.key_points.map((point, i) => (
@@ -559,14 +553,14 @@ export default function DossierDashboard() {
                       className="flex-1 py-3.5 bg-indigo-600 rounded-xl text-white font-semibold hover:bg-indigo-700 transition-all shadow-sm flex items-center justify-center gap-2"
                     >
                       <ClipboardCheck className="w-4 h-4" />
-                      Review in Dossier
+                      {t.dossier.reviewInDossier}
                     </Link>
                     <button
                       onClick={reset}
                       className="flex-1 py-3.5 bg-white border border-slate-200 rounded-xl text-slate-700 font-semibold hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 transition-all shadow-sm flex items-center justify-center gap-2"
                     >
                       <RefreshCw className="w-4 h-4" />
-                      Upload Another
+                      {t.dossier.uploadAnother}
                     </button>
                   </CardFooter>
                 </Card>

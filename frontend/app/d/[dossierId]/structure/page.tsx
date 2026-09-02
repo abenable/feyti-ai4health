@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiFetch, apiJson, dossierApi, downloadFromApi, workspaceHref } from "@/lib/api";
+import { useLanguage, type Dictionary } from "@/lib/i18n";
 import type { NewSectionResponse, PlanModule, ReadinessReport } from "@/lib/types";
 
 function planStatusClasses(status: string) {
@@ -33,11 +34,9 @@ function planStatusClasses(status: string) {
       return "bg-slate-50 text-slate-400 border-slate-200";
   }
 }
-const PLAN_STATUS_LABEL: Record<string, string> = {
-  approved: "approved",
-  in_review: "in review",
-  empty: "empty",
-};
+function planStatusLabel(t: Dictionary, status: string): string {
+  return { approved: t.structurePage.statusApproved, in_review: t.structurePage.statusInReview, empty: t.structurePage.statusEmpty }[status] ?? status;
+}
 function docStatusClasses(status: string) {
   switch (status) {
     case "approved":
@@ -48,16 +47,23 @@ function docStatusClasses(status: string) {
       return "bg-slate-100 text-slate-700 border-slate-200";
   }
 }
+function docStatusLabel(t: Dictionary, status: string): string {
+  return { approved: t.structurePage.statusApproved, edited: t.structurePage.statusEdited, draft: t.structurePage.statusDraft }[status] ?? status;
+}
 
-const VERDICT_META: Record<string, { label: string; text: string; ring: string }> = {
-  ready: { label: "All drafts approved", text: "text-emerald-700", ring: "ring-emerald-200 bg-emerald-50" },
-  nearly: { label: "Mostly approved", text: "text-amber-700", ring: "ring-amber-200 bg-amber-50" },
-  not_ready: { label: "Drafting in progress", text: "text-rose-700", ring: "ring-rose-200 bg-rose-50" },
-};
+function verdictMeta(t: Dictionary): Record<string, { label: string; text: string; ring: string }> {
+  return {
+    ready: { label: t.structurePage.verdictReady, text: "text-emerald-700", ring: "ring-emerald-200 bg-emerald-50" },
+    nearly: { label: t.structurePage.verdictNearly, text: "text-amber-700", ring: "ring-amber-200 bg-amber-50" },
+    not_ready: { label: t.structurePage.verdictNotReady, text: "text-rose-700", ring: "ring-rose-200 bg-rose-50" },
+  };
+}
 
 export default function DossierStructurePage() {
   const { dossierId } = useParams<{ dossierId: string }>();
   const router = useRouter();
+  const { t } = useLanguage();
+  const VERDICT_META = verdictMeta(t);
   const [plan, setPlan] = useState<PlanModule[]>([]);
   const [loading, setLoading] = useState(true);
   const [newSection, setNewSection] = useState<{ path: string; title: string; module: string } | null>(null);
@@ -74,11 +80,11 @@ export default function DossierStructurePage() {
     try {
       setPlan(await apiFetch<PlanModule[]>(dossierApi(dossierId, "/plan")));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load plan.");
+      toast.error(err instanceof Error ? err.message : t.structurePage.loadPlanFailedToast);
     } finally {
       setLoading(false);
     }
-  }, [dossierId]);
+  }, [dossierId, t]);
 
   useEffect(() => {
     fetchPlan();
@@ -105,10 +111,10 @@ export default function DossierStructurePage() {
         ctd_path: newSection.path,
         augment,
       }) as NewSectionResponse;
-      toast.success(augment ? "Section drafted — review the ⚠️ gaps." : "Blank section created.");
+      toast.success(augment ? t.structurePage.sectionDraftedToast : t.structurePage.blankSectionToast);
       router.push(`${workspaceHref(dossierId, data.section_path, data.stem)}${augment ? "" : "&edit=1"}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create section.");
+      toast.error(err instanceof Error ? err.message : t.structurePage.createSectionFailedToast);
     } finally {
       setCreating(null);
       setNewSection(null);
@@ -121,7 +127,7 @@ export default function DossierStructurePage() {
     try {
       setReadiness(await apiFetch<ReadinessReport>(dossierApi(dossierId, "/readiness")));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to analyze readiness.");
+      toast.error(err instanceof Error ? err.message : t.structurePage.readinessFailedToast);
       setReadinessOpen(false);
     } finally {
       setReadinessLoading(false);
@@ -133,7 +139,7 @@ export default function DossierStructurePage() {
     try {
       await downloadFromApi(dossierApi(dossierId, "/export/all?format=docx"), "approved-dossier.zip");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to export dossier.");
+      toast.error(err instanceof Error ? err.message : t.structurePage.exportFailedToast);
     } finally {
       setIsExporting(false);
     }
@@ -152,9 +158,11 @@ export default function DossierStructurePage() {
             <FileText className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="font-serif text-2xl font-bold text-slate-900 leading-none">CTD Structure</h1>
+            <h1 className="font-serif text-2xl font-bold text-slate-900 leading-none">{t.structurePage.title}</h1>
             <p className="text-xs text-slate-500 font-medium tracking-wide uppercase mt-1">
-              {allDocs.length} filed · {approvedCount} approved
+              {t.structurePage.filedApproved
+                .replace("{filed}", String(allDocs.length))
+                .replace("{approved}", String(approvedCount))}
             </p>
           </div>
         </div>
@@ -162,11 +170,11 @@ export default function DossierStructurePage() {
         <div className="flex items-center gap-3">
           <Button variant="outline" size="sm" onClick={openReadiness} disabled={readinessLoading}>
             {readinessLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Gauge className="w-4 h-4" />}
-            <span className="hidden sm:inline">Readiness</span>
+            <span className="hidden sm:inline">{t.structurePage.readiness}</span>
           </Button>
           <Button variant="outline" size="sm" onClick={exportAll} disabled={isExporting || approvedCount === 0}>
             {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
-            <span className="hidden sm:inline">Export all approved</span>
+            <span className="hidden sm:inline">{t.structurePage.exportAll}</span>
           </Button>
         </div>
       </header>
@@ -176,14 +184,14 @@ export default function DossierStructurePage() {
           {/* Left: full CTD tree */}
           <Card className="lg:col-span-7 flex flex-col border-slate-200/60 shadow-xl shadow-indigo-100/20 bg-white/80 backdrop-blur-xl rounded-3xl overflow-hidden">
             <CardHeader className="bg-slate-50/50 border-b border-slate-100/60 pb-4 px-5 pt-5">
-              <CardTitle className="text-lg font-serif text-slate-800">CTD Dossier Plan</CardTitle>
-              <CardDescription className="text-sm">Every section, filled or empty</CardDescription>
+              <CardTitle className="text-lg font-serif text-slate-800">{t.structurePage.planTitle}</CardTitle>
+              <CardDescription className="text-sm">{t.structurePage.planSubtitle}</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-y-auto p-3 scrollbar-thin">
               {loading ? (
                 <div className="flex items-center justify-center h-40 text-slate-500">
                   <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                  Loading plan...
+                  {t.structurePage.loadingPlan}
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -206,7 +214,7 @@ export default function DossierStructurePage() {
                                 variant="outline"
                                 className={`text-[9px] px-1.5 py-0 rounded-full shrink-0 ${planStatusClasses(sec.status)}`}
                               >
-                                {PLAN_STATUS_LABEL[sec.status]}
+                                {planStatusLabel(t, sec.status)}
                               </Badge>
                             );
                             const label = (
@@ -260,7 +268,7 @@ export default function DossierStructurePage() {
                                         variant="outline"
                                         className={`text-[9px] px-1.5 py-0 rounded-full capitalize shrink-0 ${docStatusClasses(doc.status)}`}
                                       >
-                                        {doc.status}
+                                        {docStatusLabel(t, doc.status)}
                                       </Badge>
                                     </Link>
                                   ))}
@@ -287,18 +295,15 @@ export default function DossierStructurePage() {
                 <h3 className="font-serif text-xl text-slate-800 mb-1">
                   {newSection.path} · {newSection.title}
                 </h3>
-                <p className="text-slate-500 text-sm max-w-md mb-6">
-                  This section has no document yet. Draft it with AI (structure + ⚠️ gaps for missing
-                  data) or start from a blank page.
-                </p>
+                <p className="text-slate-500 text-sm max-w-md mb-6">{t.structurePage.newSectionHint}</p>
                 <div className="flex flex-wrap items-center justify-center gap-3">
                   <Button onClick={() => createSection(true)} disabled={creating !== null}>
                     {creating === "ai" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                    Generate with AI
+                    {t.structurePage.generateWithAi}
                   </Button>
                   <Button variant="outline" onClick={() => createSection(false)} disabled={creating !== null}>
                     {creating === "blank" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Edit3 className="w-4 h-4" />}
-                    Start writing
+                    {t.structurePage.startWriting}
                   </Button>
                 </div>
               </div>
@@ -307,11 +312,8 @@ export default function DossierStructurePage() {
                 <div className="w-16 h-16 rounded-3xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 mb-4">
                   <FileText className="w-8 h-8" />
                 </div>
-                <h3 className="font-serif text-xl text-slate-700 mb-1">Select a section</h3>
-                <p className="text-slate-500 text-sm max-w-sm">
-                  Open a filed document to review it, or click an empty section to author it from
-                  scratch.
-                </p>
+                <h3 className="font-serif text-xl text-slate-700 mb-1">{t.structurePage.selectSectionTitle}</h3>
+                <p className="text-slate-500 text-sm max-w-sm">{t.structurePage.selectSectionHint}</p>
               </div>
             )}
           </Card>
@@ -331,7 +333,7 @@ export default function DossierStructurePage() {
             <motion.div
               role="dialog"
               aria-modal="true"
-              aria-label="Submission readiness report"
+              aria-label={t.structurePage.readinessReportAria}
               initial={{ opacity: 0, scale: 0.96, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 8 }}
@@ -344,8 +346,8 @@ export default function DossierStructurePage() {
                     <Gauge className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="font-serif text-lg text-slate-800 leading-none">Submission Readiness</h2>
-                    <p className="text-[11px] text-slate-500 mt-1">AI analysis of your CTD dossier</p>
+                    <h2 className="font-serif text-lg text-slate-800 leading-none">{t.structurePage.submissionReadiness}</h2>
+                    <p className="text-[11px] text-slate-500 mt-1">{t.structurePage.aiAnalysis}</p>
                   </div>
                 </div>
                 <button
@@ -361,7 +363,7 @@ export default function DossierStructurePage() {
                 {readinessLoading || !readiness ? (
                   <div className="flex flex-col items-center justify-center h-48 text-slate-500 gap-2">
                     <Loader2 className="w-6 h-6 animate-spin" />
-                    <span className="text-sm">Analyzing dossier…</span>
+                    <span className="text-sm">{t.structurePage.analyzingDossier}</span>
                   </div>
                 ) : (
                   <div className="space-y-6">
@@ -371,16 +373,19 @@ export default function DossierStructurePage() {
                           {readiness.score}
                           <span className="text-lg text-slate-400">%</span>
                         </div>
-                        <div className="text-[10px] uppercase tracking-wider text-slate-400 mt-1">approved / drafted</div>
+                        <div className="text-[10px] uppercase tracking-wider text-slate-400 mt-1">{t.structurePage.approvedOverDrafted}</div>
                       </div>
                       <div className="min-w-0">
                         <div className={`font-semibold ${VERDICT_META[readiness.verdict_label].text}`}>
                           {VERDICT_META[readiness.verdict_label].label}
                         </div>
                         <div className="text-xs text-slate-500 mt-1">
-                          {readiness.totals.approved} approved · {readiness.totals.in_review} in review ·{" "}
-                          {readiness.totals.empty} empty · {readiness.open_gaps} open ⚠️ gap
-                          {readiness.open_gaps === 1 ? "" : "s"}
+                          {t.structurePage.approvedInReviewEmptyGaps
+                            .replace("{approved}", String(readiness.totals.approved))
+                            .replace("{inReview}", String(readiness.totals.in_review))
+                            .replace("{empty}", String(readiness.totals.empty))
+                            .replace("{gaps}", String(readiness.open_gaps))
+                            .replaceAll("{plural}", readiness.open_gaps === 1 ? "" : "s")}
                         </div>
                       </div>
                     </div>
@@ -392,7 +397,11 @@ export default function DossierStructurePage() {
                           <div key={m.module}>
                             <div className="flex items-center justify-between text-[11px] mb-1">
                               <span className="font-medium text-slate-600 line-clamp-1">{m.module}</span>
-                              <span className="text-slate-400 shrink-0 ml-2">{m.drafted}/{total} drafted</span>
+                              <span className="text-slate-400 shrink-0 ml-2">
+                                {t.structurePage.draftedOfTotal
+                                  .replace("{drafted}", String(m.drafted))
+                                  .replace("{total}", String(total))}
+                              </span>
                             </div>
                             <div className="flex h-2 rounded-full overflow-hidden bg-slate-100">
                               <div className="bg-emerald-500" style={{ width: `${(m.approved / total) * 100}%` }} />

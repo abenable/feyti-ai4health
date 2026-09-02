@@ -65,9 +65,9 @@ export function Nav() {
   return (
     <TooltipProvider delay={200}>
       <nav className="sticky top-0 z-40 w-full border-b border-slate-200/60 bg-[#fdfbf7]/90 backdrop-blur-xl">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-2 xl:gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <Link href="/" className="font-serif text-lg font-bold text-slate-900 tracking-tight shrink-0">
+            <Link href="/" className="font-serif text-lg font-bold text-slate-900 tracking-tight shrink-0 whitespace-nowrap">
               Feyti
             </Link>
             {dossierName && (
@@ -78,7 +78,7 @@ export function Nav() {
             )}
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 min-w-0">
             <LanguageSwitcher />
             {links.map(({ href, label, icon: Icon }) => {
               // The dashboard link (bare /d/{id}) must match exactly, or it would
@@ -88,24 +88,24 @@ export function Nav() {
                 <Link
                   key={href}
                   href={href}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider transition-colors ${
+                  className={`flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider whitespace-nowrap shrink-0 transition-colors ${
                     active
                       ? "bg-indigo-100 text-indigo-800"
                       : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">{label}</span>
+                  <span className="hidden xl:inline">{label}</span>
                 </Link>
               );
             })}
             {dossierId && (
               <Link
                 href="/"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+                className="flex items-center gap-1.5 px-2.5 xl:px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider whitespace-nowrap shrink-0 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
               >
                 <ArrowLeftRight className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Switch</span>
+                <span className="hidden xl:inline">{t.nav.switch}</span>
               </Link>
             )}
           </div>
@@ -121,12 +121,10 @@ export function Nav() {
                 }
               >
                 {isBackendOnline ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
-                <span className="hidden md:inline">{isBackendOnline ? "System Online" : "System Offline"}</span>
+                <span className="hidden xl:inline">{isBackendOnline ? t.nav.systemOnline : t.nav.systemOffline}</span>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="bg-slate-800 text-white border-none shadow-xl max-w-xs text-center">
-                {isBackendOnline
-                  ? "Backend is connected and ready to process documents."
-                  : "Cannot reach the analysis server. Please ensure the backend is running."}
+                {isBackendOnline ? t.nav.systemOnlineTooltip : t.nav.systemOfflineTooltip}
               </TooltipContent>
             </Tooltip>
           )}
