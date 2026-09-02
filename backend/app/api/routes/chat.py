@@ -5,7 +5,7 @@ Two providers, both surfaced as "Aicyclinder" to the user:
     disabled server-side — the CTD-classifier adapter only emits section
     codes, not conversation). The default; requests to it that fail
     (box unreachable, HTTP error) fall back to "cloud" automatically.
-  • "cloud"       → Kimi (kept internal; never named in the UI).
+  • "cloud"       → LiteLLM (kept internal; never named in the UI).
 """
 
 import logging
@@ -25,12 +25,12 @@ from app.services.dossier_service import (
     _resolve_section_dir,
     _safe_filename,
 )
-from app.services.llm import aicyclinder_chat, kimi_chat
+from app.services.llm import aicyclinder_chat, litellm_chat
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-_CLOUD = "cloud"  # internal alias for Kimi
+_CLOUD = "cloud"  # internal alias for LiteLLM
 
 
 def _dossier_system_prompt(root: Path, section_path: str | None, stem: str | None) -> str | None:
@@ -95,14 +95,14 @@ async def _chat_aicyclinder(req: ChatRequest, root: Path) -> ChatResponse:
             temperature=req.temperature,
         )
     except httpx.HTTPError as exc:
-        logger.warning("Aicyclinder unreachable, falling back to Kimi: %s", exc)
+        logger.warning("Aicyclinder unreachable, falling back to LiteLLM: %s", exc)
         return await _chat_cloud(req, root)
     return ChatResponse(response=text)
 
 
 async def _chat_cloud(req: ChatRequest, root: Path) -> ChatResponse:
     try:
-        text = await kimi_chat(
+        text = await litellm_chat(
             _with_system_prompt(req, root),
             max_tokens=req.max_new_tokens,
             temperature=req.temperature,
@@ -122,7 +122,7 @@ async def chat_health(dossier_id: str, provider: str = "aicyclinder"):
     Provider health doesn't depend on dossier content; dossier_id is only here
     because it's part of this route's URL prefix."""
     if provider == _CLOUD:
-        if settings.KIMI_API_KEY:
+        if settings.LITELLM_API_KEY:
             return {"status": "ok"}
         raise HTTPException(status_code=503, detail="Cloud offline")
 

@@ -5,19 +5,20 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Feyti"
     API_V1_STR: str = "/api/v1"
     # Text reasoning (classification) always tries Aicyclinder (self-hosted)
-    # first, falling back to Kimi then Gemini on error — see llm.py.
+    # first, falling back to LiteLLM then Gemini on error — see llm.py.
     # OCR always uses Gemini (neither fallback offers vision).
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3.5-flash"
-    KIMI_API_KEY: str = ""
-    KIMI_MODEL: str = "kimi-k3"
-    KIMI_BASE_URL: str = "https://api.moonshot.ai/v1"
+    LITELLM_API_KEY: str = ""
+    LITELLM_MODEL: str = "GLM-5.3-Flash"
+    LITELLM_BASE_URL: str = "https://litellm.byte10x.dev/v1"
     # OCR provider for scanned PDFs: "cloudflare" (Moondream) or "gemini".
     OCR_PROVIDER: str = "cloudflare"
     CLOUDFLARE_ACCOUNT_ID: str = ""
     CLOUDFLARE_API_TOKEN: str = ""
     CLOUDFLARE_OCR_MODEL: str = "@cf/moondream/moondream3.1-9B-A2B"
     # Container directory holding one subfolder per dossier.
+    DATABASE_URL: str = "postgresql+psycopg://feyti:feyti@localhost:5432/feyti"
     DOSSIERS_ROOT: str = "./dossiers"
     # Pre-multi-dossier layout ("./dossier", singular) — migrated into
     # DOSSIERS_ROOT/default on first run if found. Safe to ignore afterwards.

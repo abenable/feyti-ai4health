@@ -1,15 +1,16 @@
 """Provider-agnostic text LLM layer — self-hosted Aicyclinder is the default,
-Kimi and Gemini are fallbacks if it errors or is unreachable.
+LiteLLM and Gemini are fallbacks if it errors or is unreachable.
 
 Used for text reasoning (document classification). OCR is NOT here: it needs
-vision, which neither Kimi nor Aicyclinder offer, so OCR stays on Gemini in
+vision, which neither LiteLLM nor Aicyclinder offer, so OCR stays on Gemini in
 document_processor.py.
 
-Kimi (Moonshot AI) and Aicyclinder (our own self-hosted box, serve.py in
-feyti_ctd_model) both speak the OpenAI chat-completions REST shape, so they
-share one _openai_chat() helper — Aicyclinder just has no API key and no
-native JSON mode, so callers needing JSON from it must ask for it in the
-prompt, same as generate_json()'s callers already do for the other providers.
+LiteLLM (OpenAI-compatible proxy, litellm.byte10x.dev) and Aicyclinder (our
+own self-hosted box, serve.py in feyti_ctd_model) both speak the OpenAI
+chat-completions REST shape, so they share one _openai_chat() helper —
+Aicyclinder just has no API key and no native JSON mode, so callers needing
+JSON from it must ask for it in the prompt, same as generate_json()'s callers
+already do for the other providers.
 """
 
 import logging
@@ -23,9 +24,9 @@ from app.services.gemini_service import get_client
 
 logger = logging.getLogger(__name__)
 
-_KIMI_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
+_LITELLM_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 # Kept well under the public gateway's own timeout (~60s) so a slow/overloaded
-# box triggers the Kimi/Gemini fallback instead of the gateway 504ing first.
+# box triggers the LiteLLM/Gemini fallback instead of the gateway 504ing first.
 _AICYCLINDER_TIMEOUT = httpx.Timeout(20.0, connect=5.0)
 
 
@@ -56,21 +57,21 @@ async def generate_text(prompt: str, max_tokens: int | None = None) -> str:
 
 
 async def _generate(prompt: str, json_mode: bool, max_tokens: int | None = None) -> str:
-    """Self-hosted first; Kimi, then Gemini, only on failure (unreachable box,
+    """Self-hosted first; LiteLLM, then Gemini, only on failure (unreachable box,
     HTTP error, or the fallback's own key not configured)."""
     errors = []
     try:
         return await _aicyclinder(prompt, max_tokens=max_tokens)
     except httpx.HTTPError as exc:
-        logger.warning("[llm] Aicyclinder unreachable, falling back to Kimi: %s", exc)
+        logger.warning("[llm] Aicyclinder unreachable, falling back to LiteLLM: %s", exc)
         errors.append(f"aicyclinder: {exc}")
 
-    if settings.KIMI_API_KEY:
+    if settings.LITELLM_API_KEY:
         try:
-            return await _kimi(prompt, json_mode=json_mode, max_tokens=max_tokens)
+            return await _litellm(prompt, json_mode=json_mode, max_tokens=max_tokens)
         except httpx.HTTPError as exc:
-            logger.warning("[llm] Kimi failed, falling back to Gemini: %s", exc)
-            errors.append(f"kimi: {exc}")
+            logger.warning("[llm] LiteLLM failed, falling back to Gemini: %s", exc)
+            errors.append(f"litellm: {exc}")
 
     try:
         return await _gemini(prompt, json_mode=json_mode, max_tokens=max_tokens)
@@ -119,25 +120,25 @@ async def _openai_chat(
     return data["choices"][0]["message"]["content"] or ""
 
 
-# ── Kimi / Moonshot AI ───────────────────────────────────────────────────────
-async def _kimi(prompt: str, json_mode: bool, max_tokens: int | None = None) -> str:
+# ── LiteLLM (OpenAI-compatible proxy, litellm.byte10x.dev) ──────────────────
+async def _litellm(prompt: str, json_mode: bool, max_tokens: int | None = None) -> str:
     messages = [{"role": "user", "content": prompt}]
-    return await kimi_chat(messages, json_mode=json_mode, max_tokens=max_tokens)
+    return await litellm_chat(messages, json_mode=json_mode, max_tokens=max_tokens)
 
 
-async def kimi_chat(
+async def litellm_chat(
     messages: list[dict],
     max_tokens: int | None = None,
     temperature: float = 0.0,
     json_mode: bool = False,
 ) -> str:
-    """Multi-turn Kimi chat completion. Used by both classification (single
+    """Multi-turn LiteLLM chat completion. Used by both classification (single
     prompt) and the chat interface (full message history)."""
-    if not settings.KIMI_API_KEY:
-        raise RuntimeError("KIMI_API_KEY is not set.")
+    if not settings.LITELLM_API_KEY:
+        raise RuntimeError("LITELLM_API_KEY is not set.")
     return await _openai_chat(
-        settings.KIMI_BASE_URL, settings.KIMI_MODEL, messages,
-        settings.KIMI_API_KEY, max_tokens, temperature, json_mode, _KIMI_TIMEOUT,
+        settings.LITELLM_BASE_URL, settings.LITELLM_MODEL, messages,
+        settings.LITELLM_API_KEY, max_tokens, temperature, json_mode, _LITELLM_TIMEOUT,
     )
 
 

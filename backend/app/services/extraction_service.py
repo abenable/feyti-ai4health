@@ -1,6 +1,6 @@
 """Structured information extraction for a filed CTD document.
 
-Runs one Gemini/Kimi structured-output call, same pattern as
+Runs one Gemini/LiteLLM structured-output call, same pattern as
 classification_service.classify(). The requested field set is section-aware —
 driven off the classified CTD path prefix — so a stability report is asked for
 batches/conditions/timepoints while a GMP certificate is asked for

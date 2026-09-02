@@ -141,8 +141,8 @@ def test_file_into_dossier_rejects_path_traversal(tmp_path):
     assert written[0].resolve().is_relative_to(tmp_path.resolve())
 
 
-async def test_llm_falls_back_aicyclinder_to_kimi_to_gemini(monkeypatch):
-    """Aicyclinder is tried first; only on failure does it try Kimi (if
+async def test_llm_falls_back_aicyclinder_to_litellm_to_gemini(monkeypatch):
+    """Aicyclinder is tried first; only on failure does it try LiteLLM (if
     configured), then Gemini."""
     from app.core.config import settings
     from app.services import llm
@@ -150,15 +150,15 @@ async def test_llm_falls_back_aicyclinder_to_kimi_to_gemini(monkeypatch):
     async def failing_aicyclinder(prompt, max_tokens=None):
         raise httpx.ConnectError("self-hosted box unreachable")
 
-    async def failing_kimi(prompt, json_mode, max_tokens=None):
+    async def failing_litellm(prompt, json_mode, max_tokens=None):
         raise httpx.HTTPStatusError("suspended", request=None, response=httpx.Response(429))
 
     async def fake_gemini(prompt, json_mode, max_tokens=None):
         return "gemini response"
 
-    monkeypatch.setattr(settings, "KIMI_API_KEY", "test-key")
+    monkeypatch.setattr(settings, "LITELLM_API_KEY", "test-key")
     monkeypatch.setattr(llm, "_aicyclinder", failing_aicyclinder)
-    monkeypatch.setattr(llm, "_kimi", failing_kimi)
+    monkeypatch.setattr(llm, "_litellm", failing_litellm)
     monkeypatch.setattr(llm, "_gemini", fake_gemini)
 
     result = await llm.generate_text("prompt")
@@ -171,11 +171,11 @@ async def test_llm_prefers_aicyclinder_when_reachable(monkeypatch):
     async def fake_aicyclinder(prompt, max_tokens=None):
         return "aicyclinder response"
 
-    async def unreachable_kimi(*args, **kwargs):
+    async def unreachable_litellm(*args, **kwargs):
         raise AssertionError("should not fall back when aicyclinder succeeds")
 
     monkeypatch.setattr(llm, "_aicyclinder", fake_aicyclinder)
-    monkeypatch.setattr(llm, "_kimi", unreachable_kimi)
+    monkeypatch.setattr(llm, "_litellm", unreachable_litellm)
 
     result = await llm.generate_text("prompt")
     assert result == "aicyclinder response"
