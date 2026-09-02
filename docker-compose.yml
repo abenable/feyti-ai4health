@@ -31,6 +31,11 @@ services:
       - ./backend/.env
     environment:
       DATABASE_URL: postgresql+psycopg://feyti:feyti@postgres:5432/feyti
+    # Legacy sidecar dossiers are bind-mounted read-only (not baked into the
+    # image) so scripts/migrate_sidecars_to_pg.py can import them once; after
+    # that PostgreSQL is the only store.
+    volumes:
+      - ./backend/dossiers:/app/dossiers:ro
     # No published ports: backend is reachable only on the internal network,
     # via the frontend's server-side proxy (see next.config.ts rewrites).
     expose:
