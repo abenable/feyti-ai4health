@@ -7,11 +7,20 @@ from datetime import datetime
 from typing import Any, Dict
 
 from app.models.pv_schemas import ADRReport, MedDRACoding
-from app.services import llm, pv_service, store_utils
+from app.services import db_repo, llm, pv_service
+
+_KIND = "pv_meddra_cache"
+_KEY = "cache"
 
 
-def _cache_path(dossier_id: str):
-    return store_utils.safe_join(pv_service._pv_root(dossier_id), "meddra_cache.json")
+def _load_cache(dossier_id: str) -> Dict[str, Any]:
+    row = db_repo.feature_get(pv_service.feature_scope(dossier_id), _KIND, _KEY)
+    data = (row.data if row else None) or {}
+    return data if isinstance(data, dict) else {}
+
+
+def _save_cache(dossier_id: str, cache: Dict[str, Any]) -> None:
+    db_repo.feature_put(pv_service.feature_scope(dossier_id), _KIND, _KEY, cache)
 
 
 async def suggest(term: str, dossier_id: str) -> Dict[str, Any]:
@@ -22,8 +31,7 @@ async def suggest(term: str, dossier_id: str) -> Dict[str, Any]:
     name with no code rather than inventing a licensed MedDRA code.
     """
     clean_term = term.strip()
-    cache_file = _cache_path(dossier_id)
-    cache = store_utils.read_json(cache_file) or {}
+    cache = _load_cache(dossier_id)
     cached = cache.get(clean_term)
     if isinstance(cached, dict):
         return {**cached, "source": "cache"}
@@ -49,7 +57,7 @@ async def suggest(term: str, dossier_id: str) -> Dict[str, Any]:
         "source": "llm_suggestion",
     }
     cache[clean_term] = suggestion
-    store_utils.write_json(cache_file, cache)
+    _save_cache(dossier_id, cache)
     return suggestion
 
 

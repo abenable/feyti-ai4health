@@ -65,9 +65,9 @@ def toggle_source(source_key: str = Body(...), enabled: bool = Body(...)):
     for s in srcs:
         if s.key == source_key:
             s.enabled = enabled
-            # rewrite whole file
-            from app.services.regintel_store import _save, _SOURCES_PATH
-            _save(_SOURCES_PATH, [json.loads(item.model_dump_json()) for item in srcs])
+            from app.services import db_repo
+            db_repo.feature_put("global", "regintel_source", s.key,
+                                json.loads(s.model_dump_json()))
             return {"key": source_key, "enabled": enabled}
     raise HTTPException(status_code=404, detail="Source not found")
 

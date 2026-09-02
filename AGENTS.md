@@ -24,14 +24,14 @@ filesystem persistence with JSON sidecars.
 ## Backend conventions (`backend/`)
 
 - Python 3.10 + uv. Run tests: `uv run pytest tests/ -v`. Syntax gate: `uv run python -m compileall app main.py`.
-- No DB. Persistence = JSON sidecar files inside `DOSSIERS_ROOT` (one folder per dossier).
-  New stores must go through `app/services/store_utils.py` (`safe_join`, `read_json`, `write_json`)
-  and respect `_safe_dir_name`/`_safe_filename` in `dossier_service.py`. Every path resolve
-  must assert the result is under the dossier root (path traversal is the #1 risk).
-- Per-document metadata: `<stem>.meta.json`; status: `<stem>.status.json`; generated content:
-  `<stem>.generated.md`. Translated copies: `<stem>.<lang>.generated.md` (never overwrite originals).
+- Persistence = PostgreSQL via SQLAlchemy (`app/db.py`: Dossier/Document/FeatureRecord, `postgresql+psycopg://`,
+  `DATABASE_URL` setting; docker-compose service `postgres`, internal network only). Tests run the same models on
+  in-memory SQLite via `tests/conftest.py` (sets `DATABASE_URL` before app imports).
+- Dossier/section paths are opaque handles: `root.name` is the dossier id; `db_repo.doc_key(section_dir, stem)`
+  derives `(dossier_id, section_path, stem)`. All SQL goes through `app/services/db_repo.py`.
+- Legacy JSON sidecars were migrated by `scripts/migrate_sidecars_to_pg.py` (idempotent, re-runnable).
 - LLM calls go through `app/services/llm.py` only (`generate_json`, `generate_text`) —
-  Aicyclinder → Kimi → Gemini fallback chain. Never call providers directly from feature code.
+  Aicyclinder → LiteLLM → Gemini fallback chain. Never call providers directly from feature code.
 - Deterministic-first principle (from `specs/capability-buildout.md`): deterministic checks
   produce the numbers; the LLM only narrates, extracts, or translates. Every LLM feature must
   have a deterministic fallback and degrade gracefully when the LLM is unreachable.

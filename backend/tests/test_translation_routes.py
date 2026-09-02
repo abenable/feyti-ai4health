@@ -64,9 +64,10 @@ def test_translation_flow(client, monkeypatch):
     data = response.json()
     assert data["stem"] == stem
     assert data["language"] == "fr"
-    # Verify translated file exists.
-    translated_path = section_dir / f"{stem}.fr.generated.md"
-    assert translated_path.read_text().endswith("(fr)")
+    # Verify the translation is stored on the document row.
+    from app.services import db_repo
+    row = db_repo.get_document_row(*db_repo.doc_key(section_dir, stem))
+    assert row.translations["fr"].endswith("(fr)")
 
     # GET status should list available languages.
     status_resp = client.get(

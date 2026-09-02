@@ -1,11 +1,12 @@
 import logging
+import mimetypes
 import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import require_dossier_root
 from app.models.schemas import (
@@ -210,15 +211,24 @@ def source(section_path: str = Query(...), stem: str = Query(...), root: Path = 
 @router.get("/original")
 def original(section_path: str = Query(...), stem: str = Query(...), root: Path = Depends(require_dossier_root)):
     """Download the original uploaded file (source of the extracted text)."""
+    from fastapi import Response
+
+    from app.services import db_repo
+
     section_dir, safe_stem = _stem_file(root, section_path, stem)
-    meta = read_meta(section_dir, safe_stem)
-    filename = meta.get("filename")
+    dossier_id, section_path_key, key_stem = db_repo.doc_key(section_dir, stem)
+    row = db_repo.get_document_row(dossier_id, section_path_key, key_stem)
+    filename = (row.filename if row else "") or (read_meta(section_dir, safe_stem).get("filename") or "")
     if not filename:
         raise HTTPException(status_code=404, detail="No original file for this document (authored section).")
-    file_path = section_dir / filename
-    if not file_path.exists():
+    if not row or not row.original_data:
         raise HTTPException(status_code=404, detail="Original file is missing from disk.")
-    return FileResponse(file_path, filename=filename)
+    media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    return Response(
+        content=row.original_data,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/document", response_model=DocumentDetail)

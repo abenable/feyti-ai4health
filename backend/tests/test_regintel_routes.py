@@ -1,24 +1,14 @@
 import pytest
 from fastapi.testclient import TestClient
 from main import app
-from app.services.regintel_store import (
-    _ALERTS_PATH,
-    _DEADLINES_PATH,
-    _save,
-    _SOURCES_PATH,
-    get_alerts,
-)
+from app.services import db_repo
+from app.services.regintel_store import get_alerts
 
 client = TestClient(app)
 
 @pytest.fixture(autouse=True)
-def clean_store(tmp_path):
-    # Ensure empty alerts and deadlines
-    if _ALERTS_PATH.is_file():
-        _ALERTS_PATH.unlink()
-    if _DEADLINES_PATH.is_file():
-        _DEADLINES_PATH.unlink()
-    # Ensure sources exist (seeded)
+def clean_store():
+    # Fresh DB per test (conftest); sources are re-seeded there.
     from app.services.regintel_store import ensure_sources_seeded
     ensure_sources_seeded()
     yield
@@ -68,7 +58,7 @@ def test_add_impact_monkeypatched(monkeypatch):
         "doc_type": "regulation",
         "detected_at": "2024-01-01T00:00:00",
     }
-    _save(_ALERTS_PATH, [alert])
+    db_repo.feature_put("global", "regintel_alert", alert["alert_id"], alert)
     def fake_generate_text(prompt, max_tokens=None):
         return "Impact summary generated"
     monkeypatch.setattr('app.services.regintel_ai.generate_text', fake_generate_text)

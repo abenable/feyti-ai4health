@@ -1,14 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pathlib import Path
-import json
 import httpx
 import os
-import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.api.deps import require_dossier_root
-from app.services.store_utils import safe_join, write_json, read_json
-from app.services.dossier_service import dossier_root, _safe_filename, slugify
+from app.services import db_repo
+from app.services.dossier_service import _safe_dir_name, _safe_filename, slugify
 from app.services.ctd_map import get_ctd_title
 
 from app.services.lit_scrapers import run_all_scrapers
@@ -45,8 +43,8 @@ async def search(req: SearchRequest, root: Path = Depends(require_dossier_root))
 
     The search parameters are built via ``build_search_params`` (LLM first,
     deterministic fallback). All scrapers run in parallel; failures are ignored.
-    Results are deduplicated by DOI then URL, ranked, and saved under
-    ``dossiers/<id>/literature/<safe_query>.json``.
+    Results are deduplicated by DOI then URL, ranked, and saved as a
+    literature_search feature record scoped to the dossier.
     """
     # 1. Build structured params (may use LLM).
     params = await build_search_params(req.query)
@@ -78,41 +76,33 @@ async def search(req: SearchRequest, root: Path = Depends(require_dossier_root))
     ranked = await rank_results(req.query, deduped, region=region, topics=topics)
 
     # 5. Persist.
+    dossier_id = db_repo.dossier_id_from_root(root)
     safe_name = _safe_filename(req.query)
-    literature_dir = safe_join(root, Path("literature"))
-    os.makedirs(literature_dir, exist_ok=True)
-    file_path = literature_dir / f"{safe_name}.json"
     payload = {
         "query": req.query,
         "params": params,
         "saved_at": datetime.utcnow().isoformat(),
         "results": ranked,
     }
-    write_json(file_path, payload)
+    db_repo.feature_put(dossier_id, "literature_search", safe_name, payload)
     return ranked
 
 
 @router.get("/searches")
 def list_searches(root: Path = Depends(require_dossier_root)):
-    """List past literature searches stored under the dossier.
+    """List past literature searches stored for the dossier.
 
     Returns a list of objects ``{"query": <query>, "count": <result count>, "date": <ISO timestamp>}``.
     """
-    literature_dir = safe_join(root, Path("literature"))
-    if not literature_dir.is_dir():
-        return []
+    dossier_id = db_repo.dossier_id_from_root(root)
     entries = []
-    for entry in literature_dir.iterdir():
-        if entry.suffix != ".json":
-            continue
-        data = read_json(entry)
-        if not data:
-            continue
+    for row in db_repo.feature_list(dossier_id, "literature_search"):
+        data = row.data or {}
         entries.append(
             {
-                "query": data.get("query", entry.stem),
+                "query": data.get("query", row.record_key),
                 "count": len(data.get("results", [])),
-                "date": data.get("saved_at", datetime.fromtimestamp(entry.stat().st_mtime).isoformat()),
+                "date": data.get("saved_at", row.created_at.isoformat()),
             }
         )
     # Most recent first
@@ -124,21 +114,20 @@ def list_searches(root: Path = Depends(require_dossier_root)):
 def get_search(query: str, root: Path = Depends(require_dossier_root)):
     """Replay a saved search identified by its original query string.
     """
-    safe_name = _safe_filename(query)
-    file_path = safe_join(root, Path(f"literature/{safe_name}.json"))
-    data = read_json(file_path)
-    if not data:
+    dossier_id = db_repo.dossier_id_from_root(root)
+    row = db_repo.feature_get(dossier_id, "literature_search", _safe_filename(query))
+    if row is None:
         raise HTTPException(status_code=404, detail="Search not found")
-    return data
+    return row.data
 
 
 @router.post("/file")
 async def file_reference(req: FileRequest, root: Path = Depends(require_dossier_root)):
-    """Fetch a URL (if possible) and file it into the dossier under Module 5.
+    """Fetch a URL (if possible) and file it into the dossier under Module 5.
 
-    The fetched content (or an empty placeholder on failure) is stored as
-    ``<stem>.reference.md`` inside the *Other Study Reports* section (CTD path
-    ``5.3.5.4``). A minimal metadata side‑car records the original URL and source.
+    The fetched content (or an empty placeholder on failure) is stored as the
+    document's original bytes in the *Other Study Reports* section (CTD path
+    ``5.3.5.4``). The metadata records the original URL and source.
     """
     # Fetch the page – ignore errors.
     content = ""
@@ -157,22 +146,33 @@ async def file_reference(req: FileRequest, root: Path = Depends(require_dossier_
     stem_candidate = unquote(stem_candidate).split("?")[0]
     stem = slugify(stem_candidate) or "reference"
 
-    # Resolve the CTD section directory for Module 5 – Other Study Reports.
+    # File into the CTD section for Module 5 – Other Study Reports.
     ctd_path = "5.3.5.4"
+    module = "Module 5 — Clinical"
     title = get_ctd_title(ctd_path) or "Other Study Reports"
-    section_param = f"Module 5 — Clinical/{ctd_path} {title}"
-    from app.services.dossier_service import resolve_document_paths
-    paths = resolve_document_paths(root, section_param, stem)
-    # Write markdown file.
-    md_path = paths["section_dir"] / f"{stem}.reference.md"
-    md_path.write_text(content, encoding="utf-8")
-    # Write minimal meta JSON.
-    meta = {"reference_url": req.url, "source": "literature"}
-    write_json(paths["meta"], meta)
+    module_dir = _safe_dir_name(module)
+    section_dir_name = _safe_dir_name(f"{ctd_path} {title}")
+    section_path = f"{module_dir}/{section_dir_name}"
+
+    dossier_id = db_repo.dossier_id_from_root(root)
+    db_repo.ensure_dossier_row(dossier_id)
+    db_repo.upsert_document(
+        dossier_id, section_path, stem,
+        module=module, ctd_path=ctd_path, title=title,
+        filename=f"{stem}.reference.md",
+        original_data=content.encode("utf-8"),
+        extracted_text="", pages=[],
+        meta={
+            "reference_url": req.url,
+            "source": "literature",
+            "stem": stem,
+            "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        },
+        generated_markdown="", status="draft",
+    )
     return {"status": "filed", "stem": stem}
 
 
 @router.get("/health")
 async def health(dossier_id: str):
     return {"feature": "literature", "status": "ok"}
-

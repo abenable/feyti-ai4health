@@ -7,11 +7,9 @@ MedDRA PT code against a static list of expected reactions stored in JSON.
 
 from __future__ import annotations
 
-from datetime import date
-from typing import Dict, List, Optional
+from typing import Dict, List
 
-from app.services import store_utils
-from app.core.config import settings
+from app.services import db_repo
 
 # Fatal or life‑threatening outcomes trigger the 7‑day SUSAR clock.
 FATAL_OR_LIFE_THREATENING = {"fatal", "death", "life_threatening"}
@@ -20,13 +18,16 @@ SUSAR_DAYS_OTHER = 15
 
 
 def _load_expected(dossier_root_path) -> List[Dict]:
-    """Load ``expected_reactions.json`` from the dossier's ``pv`` folder.
+    """Load the dossier's expected-reactions feature record.
 
-    The file is expected to contain a list of objects with at least ``pt_code``
-    and optionally ``pt_name``.
+    The record's data holds a list of objects with at least ``pt_code`` and
+    optionally ``pt_name``.
     """
-    path = store_utils.safe_join(dossier_root_path, "pv/expected_reactions.json")
-    data = store_utils.read_json(path)
+    row = db_repo.feature_get(
+        db_repo.dossier_id_from_root(dossier_root_path),
+        "pv_expected_reactions", "expected_reactions",
+    )
+    data = (row.data if row else None) or []
     return data if isinstance(data, list) else []
 
 

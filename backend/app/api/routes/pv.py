@@ -11,13 +11,12 @@ from fastapi.responses import Response
 from app.api.deps import require_dossier_root
 from app.core.config import settings
 from app.models.pv_schemas import ADRReport, MinimumCriteriaCheck, PVReportDraft, PVSourceRequest
-from app.services import store_utils
+from app.services import db_repo, pv_extraction, pv_e2b, pv_meddra, pv_minimum_criteria, pv_service
 from app.services.dossier_service import (
+    _resolve_section_dir,
     load_extracted_text,
     read_meta,
-    resolve_document_paths,
 )
-from app.services import pv_extraction, pv_e2b, pv_meddra, pv_minimum_criteria, pv_service
 
 router = APIRouter()
 
@@ -35,15 +34,15 @@ def list_reports(dossier_id: str):
 @router.post("/reports/extract", response_model=PVReportDraft)
 async def extract_report(dossier_id: str, request: PVSourceRequest, root: Path = Depends(require_dossier_root)):
     try:
-        paths = resolve_document_paths(root, request.section_path, request.stem)
+        section_dir = _resolve_section_dir(root, request.section_path)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    meta = read_meta(paths["section_dir"], request.stem)
+    meta = read_meta(section_dir, request.stem)
     if not meta:
         raise HTTPException(status_code=404, detail="Source document metadata not found")
 
-    extracted_text = load_extracted_text(paths["section_dir"], meta)
+    extracted_text = load_extracted_text(section_dir, meta)
     if not extracted_text.strip():
         raise HTTPException(status_code=422, detail="Source document has no extracted text")
 
@@ -113,17 +112,19 @@ def add_follow_up(
     return updated
 
 
+_EXPECTED_KIND = "pv_expected_reactions"
+_EXPECTED_KEY = "expected_reactions"
+
+
 @router.get("/expected-reactions")
 def get_expected(dossier_id: str):
-    path = store_utils.safe_join(pv_service._pv_root(dossier_id), "expected_reactions.json")
-    data = store_utils.read_json(path)
-    return data or []
+    row = db_repo.feature_get(pv_service.feature_scope(dossier_id), _EXPECTED_KIND, _EXPECTED_KEY)
+    return (row.data if row else None) or []
 
 
 @router.put("/expected-reactions")
 def set_expected(dossier_id: str, reactions: List[dict]):
-    path = store_utils.safe_join(pv_service._pv_root(dossier_id), "expected_reactions.json")
-    store_utils.write_json(path, reactions)
+    db_repo.feature_put(pv_service.feature_scope(dossier_id), _EXPECTED_KIND, _EXPECTED_KEY, reactions)
     return {"status": "saved"}
 
 

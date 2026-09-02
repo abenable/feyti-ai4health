@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import (
@@ -31,13 +31,17 @@ class Base(DeclarativeBase):
     pass
 
 
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class Dossier(Base):
     __tablename__ = "dossiers"
 
     id: Mapped[str] = mapped_column(String(120), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     context: Mapped[dict[str, Any]] = mapped_column(JSONField, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 class Document(Base):
     __tablename__ = "documents"
@@ -59,8 +63,8 @@ class Document(Base):
     status: Mapped[str] = mapped_column(String(32), default="draft")
     feedback_history: Mapped[list[dict[str, Any]]] = mapped_column(JSONField, default=list)
     translations: Mapped[dict[str, str]] = mapped_column(JSONField, default=dict)
-    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
 class FeatureRecord(Base):
     __tablename__ = "feature_records"
@@ -72,8 +76,8 @@ class FeatureRecord(Base):
     record_key: Mapped[str] = mapped_column(Text, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     data: Mapped[dict[str, Any]] = mapped_column(JSONField, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
 _connect_args = {"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
 _pool_class = StaticPool if settings.DATABASE_URL in {"sqlite://", "sqlite:///:memory:"} else None

@@ -1,18 +1,19 @@
-import json
 import pytest
-from app.services import pv_expectedness, store_utils
 from pathlib import Path
 
-# Helper to create a temporary dossier root with expected reactions file.
+from app.services import db_repo, pv_expectedness
+
+# Helper to create a temporary dossier with an expected-reactions record.
 @pytest.fixture
 def dossier_root(tmp_path: Path):
-    # create expected reactions JSON
     expected = [
         {"pt_code": "10012345", "pt_name": "Headache"},
         {"pt_code": "10067890", "pt_name": "Nausea"},
     ]
-    (tmp_path / "pv").mkdir(parents=True)
-    store_utils.write_json(tmp_path / "pv" / "expected_reactions.json", expected)
+    db_repo.feature_put(
+        db_repo.dossier_id_from_root(tmp_path),
+        "pv_expected_reactions", "expected_reactions", expected,
+    )
     return tmp_path
 
 def test_assess_expected(dossier_root):

@@ -11,16 +11,11 @@ from app.services.regintel_store import (
     ensure_sources_seeded,
     add_or_update_document,
     get_documents,
-    _SOURCES_PATH,
-    _DOCUMENTS_PATH,
 )
 
 client = TestClient(app)
 
-def test_seed_sources_non_empty_urls(tmp_path):
-    # Ensure fresh seed
-    if _SOURCES_PATH.is_file():
-        _SOURCES_PATH.unlink()
+def test_seed_sources_non_empty_urls():
     ensure_sources_seeded()
     sources = get_sources()
     assert len(sources) == 5
@@ -44,10 +39,7 @@ def test_toggle_source_enabled():
     nda = next(s for s in data if s["key"] == "NDA_UG")
     assert nda["enabled"] is False
 
-def test_document_dedupe_updates_last_seen(tmp_path):
-    # Clean documents file
-    if _DOCUMENTS_PATH.is_file():
-        _DOCUMENTS_PATH.unlink()
+def test_document_dedupe_updates_last_seen():
     doc = {
         "source_key": "NDA_UG",
         "url": "http://example.com/doc1",

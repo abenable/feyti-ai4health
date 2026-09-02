@@ -1,13 +1,6 @@
 import pytest
 from app.services.regintel_change import detect_change
 from app.services.regintel_store import get_changes
-from app.services.regintel_store import _CHANGES_PATH
-
-@pytest.fixture(autouse=True)
-def clean_changes(tmp_path):
-    if _CHANGES_PATH.is_file():
-        _CHANGES_PATH.unlink()
-    yield
 
 def test_detect_change_monkeypatched_ai(monkeypatch):
     # Monkeypatch LLM generate_text to return a dummy summary

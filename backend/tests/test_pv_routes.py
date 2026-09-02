@@ -119,14 +119,16 @@ def _create_source_document(dossier_id: str, text: str):
         module="Module 1 — Administrative",
         stem="cioms-source",
     )
-    meta_path = info["section_dir"] / f"{info['stem']}.meta.json"
-    meta = json.loads(meta_path.read_text())
-    meta.update(
-        filename="cioms-source.pdf",
-        extracted_text=text,
-        extracted_chars=len(text),
+    from app.services import db_repo
+
+    db_repo.update_document_fields(
+        *db_repo.doc_key(info["section_dir"], info["stem"]),
+        meta_patch={
+            "filename": "cioms-source.pdf",
+            "extracted_text": text,
+            "extracted_chars": len(text),
+        },
     )
-    meta_path.write_text(json.dumps(meta))
     return info
 
 

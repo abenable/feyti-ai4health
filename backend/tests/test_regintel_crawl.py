@@ -3,12 +3,8 @@ import json
 import pytest
 from unittest.mock import AsyncMock
 
-from app.services.regintel_store import (
-    _SOURCES_PATH,
-    _save,
-    get_documents,
-    get_alerts,
-)
+from app.services import db_repo
+from app.services.regintel_store import get_documents, get_alerts
 from app.services.regintel_crawlers import _content_hash, crawl_all
 
 # Helper mock response
@@ -19,25 +15,15 @@ class MockResponse:
         pass
 
 @pytest.fixture(autouse=True)
-def clean_store(tmp_path, monkeypatch):
-    # Ensure fresh sources and empty documents/alerts
-    if _SOURCES_PATH.is_file():
-        _SOURCES_PATH.unlink()
-    # write a single source with test listing URL
-    source = [{
+def clean_store():
+    # Fresh DB per test (conftest); install a single test source.
+    db_repo.feature_put("global", "regintel_source", "TEST_SRC", {
         "key": "TEST_SRC",
         "country": "Testland",
         "authority": "Test Authority",
         "listing_urls": ["http://example.com/list"],
         "enabled": True,
-    }]
-    _save(_SOURCES_PATH, source)
-    # Ensure documents and alerts are empty
-    from app.services.regintel_store import _DOCUMENTS_PATH, _ALERTS_PATH
-    if _DOCUMENTS_PATH.is_file():
-        _DOCUMENTS_PATH.unlink()
-    if _ALERTS_PATH.is_file():
-        _ALERTS_PATH.unlink()
+    })
     yield
 
 def test_crawl_extraction_and_storage(monkeypatch):

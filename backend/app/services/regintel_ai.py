@@ -37,15 +37,10 @@ def generate_impact(alert_id: str, product_context: str) -> Optional[str]:
 
 
 def _replace_alert(updated_alert: RegulatoryAlert) -> None:
-    """Replace the alert with matching alert_id in the JSON store."""
-    alerts = get_alerts()
-    new_list = []
-    for a in alerts:
-        if a.alert_id == updated_alert.alert_id:
-            new_list.append(updated_alert)
-        else:
-            new_list.append(a)
-    # Direct write using store utils
-    from app.services.regintel_store import _save, _ALERTS_PATH
+    """Replace the alert with matching alert_id in the feature store."""
+    from app.services import db_repo
 
-    _save(_ALERTS_PATH, [json.loads(a.model_dump_json()) for a in new_list])
+    db_repo.feature_put(
+        "global", "regintel_alert", updated_alert.alert_id,
+        json.loads(updated_alert.model_dump_json()),
+    )

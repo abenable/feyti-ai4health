@@ -124,7 +124,7 @@ async def test_classify_uses_finetuned_model_when_reachable(monkeypatch, tmp_pat
 
 
 def test_file_into_dossier_rejects_path_traversal(tmp_path):
-    from app.services import dossier_service
+    from app.services import db_repo, dossier_service
 
     classification = {
         "section_path": "3.2.P.8.1",
@@ -135,10 +135,11 @@ def test_file_into_dossier_rejects_path_traversal(tmp_path):
     dossier_service.file_into_dossier(
         tmp_path, b"payload", "../evil.pdf", classification, "extracted text"
     )
-    written = list(tmp_path.rglob("*.pdf"))
-    assert len(written) == 1
-    assert written[0].name == "evil.pdf"
-    assert written[0].resolve().is_relative_to(tmp_path.resolve())
+    # The filename is basename-sanitized and the row stays inside the dossier.
+    docs = db_repo.list_documents(db_repo.dossier_id_from_root(tmp_path))
+    assert len(docs) == 1
+    assert docs[0].filename == "evil.pdf"
+    assert ".." not in docs[0].section_path and "/" not in docs[0].filename
 
 
 async def test_llm_falls_back_aicyclinder_to_litellm_to_gemini(monkeypatch):
