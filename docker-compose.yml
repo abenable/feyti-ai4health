@@ -1,6 +1,26 @@
 name: feyti
 
 services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: feyti-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: feyti
+      POSTGRES_PASSWORD: feyti
+      POSTGRES_DB: feyti
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U feyti -d feyti"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - feyti-network
+
   backend:
     build:
       context: ./backend
@@ -9,12 +29,17 @@ services:
     restart: unless-stopped
     env_file:
       - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://feyti:feyti@postgres:5432/feyti
     # No published ports: backend is reachable only on the internal network,
     # via the frontend's server-side proxy (see next.config.ts rewrites).
     expose:
       - "8000"
     networks:
       - feyti-network
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -34,10 +59,15 @@ services:
     ports:
       - "3200:3000"
     depends_on:
+      postgres:
+        condition: service_healthy
       backend:
         condition: service_healthy
     networks:
       - feyti-network
+
+volumes:
+  postgres-data:
 
 networks:
   feyti-network:

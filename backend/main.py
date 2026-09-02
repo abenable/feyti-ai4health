@@ -1,4 +1,6 @@
 import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,9 +15,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Create the PostgreSQL schema at startup. docker-compose gates the
+    backend on postgres being healthy, but degrade gracefully if the DB is
+    unreachable so the LLM features still work without it."""
+    try:
+        from app.db import init_db
+
+        init_db()
+        logger.info("Database schema ready (%s)", settings.DATABASE_URL.split("@")[-1])
+    except Exception as exc:
+        logger.warning("Database unavailable at startup, continuing without it: %s", exc)
+    yield
+
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    lifespan=lifespan,
 )
 
 # Set all CORS enabled origins
