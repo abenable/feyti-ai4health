@@ -65,7 +65,7 @@ def _ocr_via_gemini_page(png_bytes: bytes) -> str:
         from app.services.gemini_service import get_client
 
         resp = get_client().models.generate_content(
-            model=getattr(settings, "GEMINI_MODEL", "gemini-3.5-flash"),
+            model=settings.GEMINI_MODEL,
             contents=[
                 types.Part.from_bytes(data=png_bytes, mime_type="image/png"),
                 "Transcribe ALL text on this page of a pharmaceutical regulatory "
